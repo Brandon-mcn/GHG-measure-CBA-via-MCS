@@ -30,400 +30,178 @@ if (!require("data.table")) install.packages("data.table")
 library(data.table)
 ```
 
-
+Set up global variables
 ```{r}
 # Define the following global variables to be called by parameter functions
-
 run_count <- 1000
 scenario_start <- 2025
 scenario_end  <- 2050
 year_count <- scenario_end - scenario_start + 1
+output_headers <- scenario_start:scenario_end
+```
+
+Initiate helper functions
+```{r}
+source("parameter_functions.r")
 ```
 
 Create CO2e Emission Factor Library
 ```{r}
-EFLco2e("ar6")
+EFL.co2e("ar6")
 write_xlsx(EFL, path = "EFLco2e.xlsx")
 ```
 
-
-
 Emission Factor Simulations
 ```{r}
-
-# Specify file path
-efs <- "emission_factors.xlsx"
-
-# Get the names of all sheets in the Excel file
-ef_names <- excel_sheets(efs)
-
-# Read each sheet into a list of dataframes, named after the sheet names
-ef_data <- lapply(ef_names, function(sheet) {
-  read_excel(efs, sheet = sheet)
-})
-
-# Assign names to the list elements
-names(ef_data) <- ef_names
-
-# Assign each sheet as a separate dataframe in your environment
-list2env(ef_data, envir = .GlobalEnv)
-
-# Create empty data frames for Monte Carlo outputs
-electricity_combustion_out <- electricity_combustion[0,]
-electricity_upstream_out <- electricity_upstream[0,]
-natural_gas_out <- natural_gas[0,]
-
-# Run a for loop to randomly select a row from each dataframe
-for (i in 1:run_count) {
-  random_row <- electricity_combustion %>%
-    slice_sample(n = 1) 
-  electricity_combustion_out <- rbind(electricity_combustion_out, random_row)
-}
-
-for (i in 1:run_count) {
-  random_row <- electricity_upstream %>%
-    slice_sample(n = 1) 
-  electricity_upstream_out <- rbind(electricity_upstream_out, random_row)
-}
-
-for (i in 1:run_count) {
-  random_row <- natural_gas %>%
-    slice_sample(n = 1) 
-  natural_gas_out <- rbind(natural_gas_out, random_row)
-}
-
+scenario.MCS("electricity_ef")
 ```
 
 Parameter 1 Boundary Simulations
 ```{r}
+# Reference boundary represents zero homes funded each year
+static.value("ref_boundary", 0)
 
-# Get the names of all sheets in the Excel file
-boundary_names <- excel_sheets("p1/boundary.xlsx")
-
-# Read each sheet into a list of dataframes, named after the sheet names
-boundary_data <- lapply(boundary_names, function(sheet) {
-  read_excel("p1/boundary.xlsx", sheet = sheet)
-})
-
-# Assign names to the list elements
-names(boundary_data) <- boundary_names
-
-# Assign each sheet as a separate dataframe in your environment
-list2env(boundary_data, envir = .GlobalEnv)
-
-# Create empty data frames for Monte Carlo outputs
-ref_boundary_out <- ref_boundary[0,]
-intv_boundary_out <- intv_boundary[0,]
-
-# Run a for loop to randomly select a row for the reference boundary
-for (i in 1:run_count) {
-  random_row <- ref_boundary %>%
-    slice_sample(n = 1) 
-  ref_boundary_out <- rbind(ref_boundary_out, random_row)
-}
-
-# Run a for loop to randomly select a value for the intervention boundary
-for (i in 1:run_count) {
-  random_value <- sample(18:21, size = 1)
-  pdf_out <- as.data.frame(rbind(c(intv_boundary[1,1:3],rep(random_value, times = 11),rep(0, times = 15))))
-  colnames(pdf_out) <- colnames(intv_boundary_out)
-  pdf_out[,4:29] <- lapply(pdf_out[,4:29], as.numeric)
-  intv_boundary_out <- rbind(intv_boundary_out, pdf_out)
-}
-
-# Make sure no columns are stores as lists
-intv_boundary_out[] <- lapply(intv_boundary_out, function(x) if (is.list(x)) unlist(x) else x)
+# Intervention boundary is modeled as a random value between 18 and 21 for out through 2035 (11 years), then zero home per year afterwards.
+random.value("intv_boundary", minvalue = 18, maxvalue = 21, lifetime = 11, value2 = 0)
 
 # Transform boundary data from annual totals to cumulative totals
 
-ref_boundary_cumsum <- as.data.frame(t(apply(ref_boundary_out[,4:29], 1, cumsum))) # cumulative reference boundary.
-intv_boundary_cumsum <- as.data.frame(t(apply(intv_boundary_out[,4:29], 1, cumsum))) # cumulative intervention boundary
+ref_boundary_cumsum <- as.data.frame(t(apply(ref_boundary, 1, cumsum))) # cumulative reference boundary.
+intv_boundary_cumsum <- as.data.frame(t(apply(intv_boundary, 1, cumsum))) # cumulative intervention boundary
 net_boundary_cumsum <- intv_boundary_cumsum-ref_boundary_cumsum # net cumulative boundary
 
 ```
 
 Parameter 1 Factor Simulations
 ```{r}
+# Reference factor 1 represents the annual electricity consumption for a residential home, assumed to be 9823 kwh
+static.value("ref_factor1", 9823)
 
-# Get the names of all sheets in the Excel file
-factor_names <- excel_sheets("p1/factors.xlsx")
+# Reference factor 2 represents the annual natural gas consumption for a residential home, assumed to be 118 therms
+static.value("ref_factor2", 118)
 
-# Read each sheet into a list of dataframes, named after the sheet names
-factor_data <- lapply(factor_names, function(sheet) {
-read_excel("p1/factors.xlsx", sheet = sheet)
-})
-  
-# Assign names to the list elements
-names(factor_data) <- factor_names
+# Intervention factor 1 represents energy savings potential of the measure, provided as a % reduction in energy use. 
+# The energy savings is applied to both electricity and natural gas
+# The energy savings is modeled as a normal distribution: mean = 30% sd = 3%
+# The selected value for each simulation is applied consistently over the scenario lifetime.
+normal.PDF("intv_factor1", .3, .03)
 
-# Assign each sheet as a separate dataframe in your environment
-list2env(factor_data, envir = .GlobalEnv)
+# Calculate cumulative activity data for factor 1 (electricity, kWh)
+calculate.AD("ref_AD1", "intv_AD1", net_boundary_cumsum, ref_factor1, intv_factor1, "kWh")
 
-# Create empty data frames for Monte Carlo outputs
-ref_factor1_out <- ref_factor1[0,] # electricity
-ref_factor2_out <- ref_factor2[0,] # natural gas
-intv_factor_out <- intv_factor[0,] # % energy savings
-
-# Run a for loop to randomly select a row for ref_factor1
-for (i in 1:run_count) {
-  random_row <- ref_factor1 %>%
-    slice_sample(n = 1)  
-   ref_factor1_out <- rbind(ref_factor1_out, random_row)
-}
-
-# Run a for loop to randomly select a row for ref_factor2
-for (i in 1:run_count) {
-  random_row <- ref_factor2 %>%
-    slice_sample(n = 1)  
-   ref_factor2_out <- rbind(ref_factor2_out, random_row)   
-}
-
-# Run a for loop to randomly select a value for intv_factor
-for (i in 1:run_count) {
-  random_value <- rnorm(1, mean = .3, sd = .03)
-  pdf_out <- as.data.frame(rbind(c(intv_factor[1,1:3],rep(random_value, times = 26))))
-  colnames(pdf_out) <- colnames(intv_factor_out)
-  pdf_out[,4:29] <- lapply(pdf_out[,4:29], as.numeric)
-  intv_factor_out <- rbind(intv_factor_out, pdf_out)
-}
-# Make sure no columns are stores as lists
-intv_factor_out[] <- lapply(intv_factor_out, function(x) if (is.list(x)) unlist(x) else x)
-
-
-# Process reference factor 1 (electricity, kWh)
-
-ref_values1 <- net_boundary_cumsum*ref_factor1_out[4:29]
-ref_data1 <- cbind(ref_factor1_out[,1:3],ref_values1)
-ref_data1$unit_b <- NA
-
-# Process reference factor 2 (natural gas, therms)
-
-ref_values2 <- net_boundary_cumsum*ref_factor2_out[4:29]
-ref_data2 <- cbind(ref_factor2_out[,1:3],ref_values2)
-ref_data2$unit_b <- NA
-
-# Calculate mitigation factor for the intervention scenario. Applies globally to each reference factor
-
-mitigation_values <- intv_factor_out[4:29]
-mitigation_values[] <- data.frame(lapply(mitigation_values, as.numeric))
-intv_mitigation_factor <- 1 - mitigation_values
-
-# Process intervention factor 1
-
-intv_values1 <- ref_values1*intv_mitigation_factor
-intv_data1 <- cbind(ref_data1[,1:3],intv_values1)
-intv_data1$scenario_type <- "intervention scenario"
-intv_data1$unit_b <- NA
-
-# Process intervention factor 2
-
-intv_values2 <- ref_values2*intv_mitigation_factor
-intv_data2 <- cbind(ref_data2[,1:3],intv_values2)
-intv_data2$scenario_type <- "intervention scenario"
-intv_data2$unit_b <- NA
-
+# Calculate cumulative activity data for factor 2 (natural gas, therms)
+calculate.AD("ref_AD2", "intv_AD2", net_boundary_cumsum, ref_factor2, intv_factor1, "therms")
 ```
 
 Parameter 1 Cost Simulations
 ```{r}
+# Reference capex1 is $0 per home
+static.value("ref_capex1_costfactor", 0)
 
-# Get the names of all sheets in the Excel file
-cost_names <- excel_sheets("p1/costs.xlsx")
+# Reference opex1 is $0.16 per kWh electricity
+static.value("ref_opex1_costfactor", -.16)
 
-# Read each sheet into a list of dataframes, named after the sheet names
-cost_data <- lapply(cost_names, function(sheet) {
-  read_excel("p1/costs.xlsx", sheet = sheet)
-})
+# Reference opex2 is $2.40 per therm natural gas
+static.value("ref_opex2_costfactor", -2.4)
 
-# Assign names to the list elements
-names(cost_data) <- cost_names
-
-# Assign each sheet as a separate dataframe in your environment
-list2env(cost_data, envir = .GlobalEnv)
-
-# Create empty data frames for Monte Carlo outputs
-ref_capex1_out <- ref_capex1[0,]
-ref_opex1_out <- ref_opex1[0,]
-ref_opex2_out <- ref_opex2[0,]
-intv_capex1_out <- intv_capex1[0,]
-intv_opex1_out <- intv_opex1[0,]
-intv_opex2_out <- intv_opex2[0,]
-
-# Run a for loop to randomly select a row for ref_capex1
-for (i in 1:run_count) {
-  random_row <- ref_capex1 %>%
-    slice_sample(n = 1)  
-   ref_capex1_out <- rbind(ref_capex1_out, random_row)
-}
- 
-# Run a for loop to randomly select a row for ref_opex1
-for (i in 1:run_count) {
-  random_row <- ref_opex1 %>%
-    slice_sample(n = 1)  
-   ref_opex1_out <- rbind(ref_opex1_out, random_row)  
-}
-
-# Run a for loop to randomly select a row for ref_opex2
-for (i in 1:run_count) {
-  random_row <- ref_opex2 %>%
-    slice_sample(n = 1)  
-   ref_opex2_out <- rbind(ref_opex2_out, random_row)  
-}
-
-# Run a for loop to randomly select a value for intv_capex1
-for (i in 1:run_count) {
-  random_value <- rnorm(1, mean = -5117, sd = 52)
-  pdf_out <- as.data.frame(rbind(c(intv_capex1[1,1:3],rep(random_value, times = 26))))
-  colnames(pdf_out) <- colnames(intv_capex1_out)
-  pdf_out[,4:29] <- lapply(pdf_out[,4:29], as.numeric)
-  intv_capex1_out <- rbind(intv_capex1_out, pdf_out)
-}
-# Make sure no columns are stores as lists
-intv_capex1_out[] <- lapply(intv_capex1_out, function(x) if (is.list(x)) unlist(x) else x)
-
-# Run a for loop to randomly select a row for intv_opex1
-for (i in 1:run_count) {
-  random_row <- intv_opex1 %>%
-    slice_sample(n = 1)  
-   intv_opex1_out <- rbind(intv_opex1_out, random_row)  
-}
-
-# Run a for loop to randomly select a row for intv_opex2
-for (i in 1:run_count) {
-  random_row <- intv_opex2 %>%
-    slice_sample(n = 1)  
-   intv_opex2_out <- rbind(intv_opex2_out, random_row) 
-}
+# Intervention capex1 is the program cost per home, modeled as a normal distribution.
+# mean = $5117 sd = $52
+# The selected value for each simulation is applied consistently over the scenario lifetime.
+normal.PDF("intv_capex1_costfactor", -5117, 52)
 
 # calculate reference costs
-ref_capex1_costcalc <- ref_boundary_out[,4:29]*ref_capex1_out[,4:29]
-ref_opex1_costcalc <- net_boundary_cumsum*ref_factor1_out[,4:29]*ref_opex1_out[,4:29]
-ref_opex2_costcalc <- net_boundary_cumsum*ref_factor2_out[,4:29]*ref_opex2_out[,4:29]
+ref_capex1 <- ref_boundary*ref_capex1_costfactor
+ref_opex1 <- ref_AD1[, -1]*ref_opex1_costfactor
+ref_opex2 <- ref_AD2[, -1]*ref_opex2_costfactor
 
 # calculate intervention costs
-intv_capex1_costcalc <- intv_boundary_out[,4:29]*intv_capex1_out[,4:29]
-intv_opex1_costcalc <- net_boundary_cumsum*ref_factor1_out[,4:29]*intv_opex1_out[,4:29]*intv_mitigation_factor
-intv_opex2_costcalc <- net_boundary_cumsum*ref_factor2_out[,4:29]*intv_opex2_out[,4:29]*intv_mitigation_factor
+intv_capex1 <- intv_boundary*intv_capex1_costfactor
+intv_opex1 <- intv_AD1[, -1]*ref_opex1_costfactor # the cost for electricity is the same in the ref & intv scenarios
+intv_opex2 <- intv_AD2[, -1]*ref_opex2_costfactor # the cost for natural gas is the same in the ref & intv scenarios
 
 # Consolidate total costs
-ref_costcalc <- (ref_capex1_costcalc + ref_opex1_costcalc + ref_opex2_costcalc)
-intv_costcalc <- (intv_capex1_costcalc + intv_opex1_costcalc + intv_opex2_costcalc)
+ref_totalcost <- (ref_capex1 + ref_opex1 + ref_opex2)
+intv_totalcost <- (intv_capex1 + intv_opex1 + intv_opex2)
 
-cashflow_econ <- intv_costcalc - ref_costcalc
-cashflow_private <- intv_capex1_costcalc - ref_capex1_costcalc
+cashflow_econ <- intv_totalcost - ref_totalcost
+cashflow_private <- intv_capex1 - ref_capex1
 
 ```
 
 Parameter 1 GHG Calculations
 ```{r}
-# calculate GHG emissions for reference factor 1
+# calculate GHG emissions for AD1 (electricity)
+ghg_conversion2("ref_ghg1", "intv_ghg1", electricity_ef, ref_AD1, intv_AD1)
 
-ef1 <- electricity_combustion_out # Scope 2 electricity emission factors
-ref_ghgcalc1 <- ref_data1[,4:29]*ef1[10:35]/1000 
-ref_ghg1 <- cbind(ref_data1[,1],ef1[1:5],ref_ghgcalc1)
-colnames(ref_ghg1)[7] <- "unit"
-ref_ghg1$unit <- "mtco2e"
-
-# calculate GHG emissions for reference factor 2
-
-ef2 <- natural_gas_out # Scope 1 natural gas emission factors
-ref_ghgcalc2 <- ref_data2[,4:29]*ef2[10:35]/1000
-ref_ghg2 <- cbind(ref_data2[,1],ef2[1:5],ref_ghgcalc2)
-colnames(ref_ghg2)[7] <- "unit"
-ref_ghg2$unit <- "mtco2e"
+# calculate GHG emissions for AD2 (natural gas)
+ghg_conversion1("ref_ghg2",
+                "intv_ghg2",
+                ref_AD2,
+                intv_AD2,
+                fltr.ef_activeyear = 2024, 
+                fltr.service_type = "natural gas", 
+                fltr.emission_category = "stationary", 
+                fltr.emission_scope = "scope 1",
+                fltr.service_subcategory1 = "", 
+                fltr.service_subcategory2 = "", 
+                fltr.country = "global", 
+                fltr.subregion = "")
 
 # calculate total reference GHG emissions
-
-ref_ghgtotal <- ref_ghgcalc1 + ref_ghgcalc2
-
-# calculate GHG emissions for intervention factor 1
-
-intv_ghgcalc1 <- intv_data1[,4:29]*electricity_combustion_out[10:35]/1000 # Scope 2 electricity emission factors
-intv_ghg1 <- cbind(intv_data1[,1],ef1[1:5],intv_ghgcalc1)
-colnames(intv_ghg1)[7] <- "unit"
-intv_ghg1$unit <- "mtco2e"
-
-# calculate GHG emissions for intervention factor 2
-
-intv_ghgcalc2 <- intv_data2[,4:29]*natural_gas_out[10:35]/1000 # Scope 1 natural gas emission factors
-intv_ghg2 <- cbind(intv_data2[,1],ef2[1:5],intv_ghgcalc2)
-colnames(intv_ghg2)[7] <- "unit"
-intv_ghg2$unit <- "mtco2e"
+ref_ghgtotal <- (ref_ghg1[, -1] + ref_ghg2[, -1])/1000
+ref_ghgtotal$unit <- "mtco2e"
+ref_ghgtotal <- ref_ghgtotal[, c("unit", setdiff(names(ref_ghgtotal), "unit"))]
 
 # calculate total intervention GHG emissions
-
-intv_ghgtotal <- intv_ghgcalc1 + intv_ghgcalc2
+intv_ghgtotal <- (intv_ghg1[, -1] + intv_ghg2[, -1])/1000
+intv_ghgtotal$unit <- "mtco2e"
+intv_ghgtotal <- intv_ghgtotal[, c("unit", setdiff(names(intv_ghgtotal), "unit"))]
 
 # Calculate GHG mitigation
-
-ghg_mitigation <- ref_ghgtotal - intv_ghgtotal
-p1_ghg_mitigation <- ghg_mitigation
+ghg_mitigation <- ref_ghgtotal[, -1] - intv_ghgtotal[, -1]
+ghg_mitigation$unit <- "mtco2e"
+ghg_mitigation <- ghg_mitigation[, c("unit", setdiff(names(ghg_mitigation), "unit"))]
+p1_ghg_mitigation <- ghg_mitigation[, -1]
 ```
 
 
 Parameter 1 Co-benefits 
 ```{r}
-# Get the names of all sheets in the Excel file
-factor_names <- excel_sheets("p1/cobenefits.xlsx")
+# Social cost of carbon (SCC) is modeled as a normal distribution. It's modeled as an avoided cost, so a positive value is used. 
+# mean = $44 sd = $37
+# The selected value for each simulation is applied consistently over the scenario lifetime.
+normal.PDF("coben1", 44, 37)
 
-# Read each sheet into a list of dataframes, named after the sheet names
-factor_data <- lapply(factor_names, function(sheet) {
-read_excel("p1/cobenefits.xlsx", sheet = sheet)
-})
-  
-# Assign names to the list elements
-names(factor_data) <- factor_names
-
-# Assign each sheet as a separate dataframe in your environment
-list2env(factor_data, envir = .GlobalEnv)
-
-# Create empty data frames for Monte Carlo outputs
-coben1_out <- coben1[0,] # social cost of carbon
-
-# Run a for loop to simulate the SCC
-for (i in 1:run_count) {
-  random_value <- rnorm(1, mean = 44, sd = 37)
-  growth_rate <- 1.03
-  SCC <- random_value * (growth_rate)^(0:25)
-  pdf_out <- as.data.frame(rbind(c(coben1[1,1:3],SCC)))
-  colnames(pdf_out) <- colnames(coben1_out)
-  pdf_out[,4:29] <- lapply(pdf_out[,4:29], as.numeric)
-  coben1_out <- rbind(coben1_out, pdf_out)
-}
-# Make sure no columns are stores as lists
-coben1_out[] <- lapply(coben1_out, function(x) if (is.list(x)) unlist(x) else x)
+# The function above leads to negative values for the social cost of carbon. In practice, this does not make sense. So negative values are converted to 0 below
+coben1[coben1 < 0] <- 0
 
 # Calculate social value from Parameter 1 co-benefits 
 
-coben1_value <- ghg_mitigation * coben1_out[,4:29]
-coben1_value <- cbind(coben1_out[,1:3],coben1_value)
-coben1_value$coben_name <- "Social value of GHG mitigation (in 2025 USD)"
-coben1_value$unit_b <- NA
-cobenefit_value <- coben1_value[,4:29]
+coben1_value <- p1_ghg_mitigation * coben1
+coben1_value$unit <- "social value of avoided carbon (USD)"
+coben1_value <- coben1_value[, c("unit", setdiff(names(coben1_value), "unit"))]
+total_coben_value <- coben1_value[, -1]
 
 ```
 
-Parameter 1 output
+Excel Export
 ```{r}
-#NEED TO FIX - maybe split into multiple outputs 
-
-p1_outputlist <- (list("ref_boundary_out" = ref_boundary_out,
-                    "intv_boundary_out" = intv_boundary_out, 
-                    "ref_factor1_out" = ref_factor1_out,
-                    "ref_factor2_out" = ref_factor2_out,
-                    "intv_factor_out" = intv_factor_out,
-                    "ref_capex1_out" = ref_capex1_out,
-                    "intv_capex1_out" = intv_capex1_out,
-                    "ref_opex1_out" = ref_opex1_out,
-                    "intv_opex1_out" = intv_opex1_out,
-                    "ref_opex2_out" = ref_opex2_out,
-                    "intv_opex2_out" = intv_opex2_out,
-                    "ref_data1" = ref_data1,
-                    "intv_data1" = intv_data1,
-                    "ref_data2" = ref_data2,
-                    "intv_data2" = intv_data2,
-                    "emission_factors_1" = ef1,
-                    "emission_factors_2" = ef2,
+p1_outputlist <- (list("ref_boundary" = ref_boundary,
+                    "intv_boundary" = intv_boundary, 
+                    "ref_factor1" = ref_factor1,
+                    "ref_factor2" = ref_factor2,
+                    "intv_factor" = intv_factor1,
+                    "ref_capex1" = ref_capex1,
+                    "intv_capex1" = intv_capex1,
+                    "ref_opex1" = ref_opex1,
+                    "intv_opex1" = intv_opex1,
+                    "ref_opex2" = ref_opex2,
+                    "intv_opex2" = intv_opex2,
+                    "ref_data1" = ref_AD1,
+                    "intv_data1" = intv_AD1,
+                    "ref_data2" = ref_AD2,
+                    "intv_data2" = intv_AD2,
+                    "emission_factors_1" = electricity_ef,
                     "ref_ghg1" = ref_ghg1,
                     "intv_ghg1" = intv_ghg1,
                     "ref_ghg2" = ref_ghg2,
@@ -431,7 +209,7 @@ p1_outputlist <- (list("ref_boundary_out" = ref_boundary_out,
                     "ref_ghgtotal" = ref_ghgtotal,
                     "intv_ghgtotal" = intv_ghgtotal,
                     "net_ghg" = ghg_mitigation,
-                    "scc" = coben1_out,
+                    "scc" = coben1,
                     "social_value" = coben1_value))
 
 #write excel and save p1 outputs (NOTE: Change names for each parameter)
@@ -465,7 +243,7 @@ for (i in 0:70) { # the loop repeats for each discount rate seq(0, 7, by = 0.1)
 }
 
 # Create vector for cumulative co-benefit value 
-coben_value_sum <- rowSums(cobenefit_value[,4:scenario_lifetime])
+coben_value_sum <- rowSums(total_coben_value[,4:scenario_lifetime])
 
 # Add the social value to each column in the economic npv dataframe
 npv_social_dr <- data.frame(matrix(nrow = nrow(npv_econ_dr), ncol = ncol(npv_econ_dr)))
@@ -637,7 +415,7 @@ colnames(npv_social_medians) <- drcolnames # column headers for each discount ra
 rownames(npv_social_medians) <- years
 
 # Create a cumulative sum of co-benefit value 
-coben_cumsum <- as.data.frame(t(apply(cobenefit_value, 1, cumsum)))
+coben_cumsum <- as.data.frame(t(apply(total_coben_value, 1, cumsum)))
 median_coben_value <- data.frame(t(apply(coben_cumsum, 2, median))) # The median cumulative NPV value for each year is taken
 median_coben_value_vector <- as.vector(unlist(median_coben_value))
 
