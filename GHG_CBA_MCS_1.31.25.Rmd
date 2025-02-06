@@ -123,9 +123,6 @@ intv_opex2 <- intv_AD2[, -1]*ref_opex2_costfactor # the cost for natural gas is 
 ref_totalcost <- (ref_capex1 + ref_opex1 + ref_opex2)
 intv_totalcost <- (intv_capex1 + intv_opex1 + intv_opex2)
 
-cashflow_econ <- intv_totalcost - ref_totalcost
-cashflow_private <- intv_capex1 - ref_capex1
-
 ```
 
 Parameter 1 GHG Calculations
@@ -161,7 +158,6 @@ intv_ghgtotal <- intv_ghgtotal[, c("unit", setdiff(names(intv_ghgtotal), "unit")
 ghg_mitigation <- ref_ghgtotal[, -1] - intv_ghgtotal[, -1]
 ghg_mitigation$unit <- "mtco2e"
 ghg_mitigation <- ghg_mitigation[, c("unit", setdiff(names(ghg_mitigation), "unit"))]
-p1_ghg_mitigation <- ghg_mitigation[, -1]
 ```
 
 
@@ -177,11 +173,18 @@ coben1[coben1 < 0] <- 0
 
 # Calculate social value from Parameter 1 co-benefits 
 
-coben1_value <- p1_ghg_mitigation * coben1
+coben1_value <- ghg_mitigation[, -1] * coben1
 coben1_value$unit <- "social value of avoided carbon (USD)"
 coben1_value <- coben1_value[, c("unit", setdiff(names(coben1_value), "unit"))]
 total_coben_value <- coben1_value[, -1]
 
+```
+
+Parameter 1 cashflow outputs
+```{r}
+cashflow_private <- intv_capex1 - ref_capex1 # assuming capital expenses are the only private cost/benefit
+cashflow_econ <- intv_totalcost - ref_totalcost
+cashflow_social <- cashflow_econ + total_coben_value
 ```
 
 Excel Export
@@ -210,7 +213,10 @@ p1_outputlist <- (list("ref_boundary" = ref_boundary,
                     "intv_ghgtotal" = intv_ghgtotal,
                     "net_ghg" = ghg_mitigation,
                     "scc" = coben1,
-                    "social_value" = coben1_value))
+                    "social_value" = coben1_value,
+                    "cashflow_private" = cashflow_private,
+                    "cashflow_econ" = cashflow_econ,
+                    "cashflow_social" = cashflow_social))
 
 #write excel and save p1 outputs (NOTE: Change names for each parameter)
 
@@ -218,186 +224,15 @@ write_xlsx(p1_outputlist, path = "p1_output.xlsx")
 
 ```
 
-Disocunt Rate Matrix: NPV Calcs
+CBA Indicator calcs with discount rate range and Monte Carlo Minulation statistics
 ```{r}
-years <- 2025:2050
-scenario_lifetime <- 16 # select scenario lifetime (start = 2025). max value is 26
-npv_econ_dr <- data.frame(matrix(NA, nrow = run_count, ncol = 71)) # make an empty matrix to populate NPV for each discount rate
-colnames(npv_econ_dr) <- ((0:70)/10) # column headers for each discount rate: seq(0, 7, by = 0.1)
+# Calculates three seperate tables of NPV for private, economic and social costs, using the range of discount rates provided
 
-for (i in 0:70) { # the loop repeats for each discount rate seq(0, 7, by = 0.1)
-  drvalues <- numeric(26) # an empty vector 'drvalues' is created to house the loop outputs
-  drvalues[1] <- 1        
-    for (n in 2:26) {
-         drvalues[n] <- (1+(i/1000))^(n-1) # drvalues is populated with the discount rate conversion factor for each year
-    }
-  drvalues_df <- data.frame(t(drvalues)) # make a dataframe out of the discount rate loop output
-  colnames(drvalues_df) <- years # make the column headers years
-  discount_df <- drvalues_df[rep(1, run_count),] # the discount rate vector is replicated into rows equal to the MCS run count
-  annual_npv <- cashflow_econ/discount_df # the total annual economic cash flow is converted into NPV
-  annual_npv_cumsum <- as.data.frame(t(apply(annual_npv, 1, cumsum))) # net present value is summed cumulatively for each year
-  npv <- annual_npv_cumsum[scenario_lifetime] # the total NPV is selected based on the scenario lifetime
-  col_rename <- i/10 #rename column with the discount rate
-  colnames(npv) <- col_rename
-  npv_econ_dr[,i+1] <- npv #bind the NPV values for each MCS row for the given discount rate
-}
+cba_discountrange(dr_min = 0, dr_max = 7, scenario_lifetime = year_count)
 
-# Create vector for cumulative co-benefit value 
-coben_value_sum <- rowSums(total_coben_value[,4:scenario_lifetime])
+# Calculates statistics for the Monte Carlo Simulation (lower bound, median, and upper bound)
 
-# Add the social value to each column in the economic npv dataframe
-npv_social_dr <- data.frame(matrix(nrow = nrow(npv_econ_dr), ncol = ncol(npv_econ_dr)))
-colnames(npv_social_dr) <- ((0:70)/10)
-for (i in seq_along(npv_econ_dr)) {
-   npv_social_dr[[i]] <-  npv_econ_dr[[i]] + coben_value_sum
-}
-
-```
-
-LCCA Calcs
-```{r}
-# Cumulative sum of GHG mitigation
-
-ghg_cumsum_annual <- as.data.frame(t(apply(p1_ghg_mitigation, 1, cumsum)))
-ghg_cumsum <- ghg_cumsum_annual[scenario_lifetime]
-ghg_dr <- data.frame(matrix(rep(ghg_cumsum[,1], 71), ncol = 71))
-
-# Calculate economic LCCA for each discount rate
-lcca_econ_dr <- (npv_econ_dr * -1)/ghg_dr
-
-# Calculate social LCCA for each discount rate
-lcca_social_dr <- (npv_social_dr * -1)/ghg_dr
-
-
-```
-
-LCCA: Calculate Median and Quantiles
-```{r}
-
-# Stats for economic LCCA
-lcca_econ_stats <- data.frame(
-  Year = character(),
-  Median = numeric(),
-  Lower = numeric(),
-  Upper = numeric(),
-  stringsAsFactors = FALSE
-)
-
-for (i in 1:71) {
-  # Extract the values for each discount rate
-  values <- lcca_econ_dr[,i]
-  
-  # Calculate statistics
-  median <- median(values)        
-  lower_bound <- quantile(values, probs = 0.25)
-  upper_bound <- quantile(values, probs = 0.75)
-  
-  # Append results to the results dataframe
-  lcca_econ_stats <- rbind(
-    lcca_econ_stats,
-    data.frame(
-      DR = colnames(lcca_econ_dr)[i],
-      Median = median,
-      Lower = lower_bound,
-      Upper = upper_bound
-    )
-  )
-}
-
-# Stats for social LCCA
-lcca_social_stats <- data.frame(
-  Year = character(),
-  Median = numeric(),
-  Lower = numeric(),
-  Upper = numeric(),
-  stringsAsFactors = FALSE
-)
-
-for (i in 1:71) {
-  # Extract the values for each discoutn rate
-  values <- lcca_social_dr[,i]
-  
-  # Calculate statistics
-  median <- median(values)        
-  lower_bound <- quantile(values, probs = 0.25)
-  upper_bound <- quantile(values, probs = 0.75)
-  
-  # Append results to the results dataframe
-  lcca_social_stats <- rbind(
-    lcca_social_stats,
-    data.frame(
-      DR = colnames(lcca_social_dr)[i],
-      Median = median,
-      Lower = lower_bound,
-      Upper = upper_bound
-    )
-  )
-}
-
-```
-
-NPV: Calculate Median and Quantiles
-```{r}
-
-# Stats for economic npv
-npv_econ_stats <- data.frame(
-  Year = character(),
-  Median = numeric(),
-  Lower = numeric(),
-  Upper = numeric(),
-  stringsAsFactors = FALSE
-)
-
-for (i in 1:71) {
-  # Extract the values for each discount rate
-  values <- npv_econ_dr[,i]
-  
-  # Calculate statistics
-  median <- median(values)        
-  lower_bound <- quantile(values, probs = 0.25)
-  upper_bound <- quantile(values, probs = 0.75)
-  
-  # Append results to the results dataframe
-  npv_econ_stats <- rbind(
-    npv_econ_stats,
-    data.frame(
-      DR = colnames(npv_econ_dr)[i],
-      Median = median,
-      Lower = lower_bound,
-      Upper = upper_bound
-    )
-  )
-}
-
-# Stats for social npv
-npv_social_stats <- data.frame(
-  Year = character(),
-  Median = numeric(),
-  Lower = numeric(),
-  Upper = numeric(),
-  stringsAsFactors = FALSE
-)
-
-for (i in 1:71) {
-  # Extract the values for each discoutn rate
-  values <- npv_social_dr[,i]
-  
-  # Calculate statistics
-  median <- median(values)        
-  lower_bound <- quantile(values, probs = 0.25)
-  upper_bound <- quantile(values, probs = 0.75)
-  
-  # Append results to the results dataframe
-  npv_social_stats <- rbind(
-    npv_social_stats,
-    data.frame(
-      DR = colnames(npv_social_dr)[i],
-      Median = median,
-      Lower = lower_bound,
-      Upper = upper_bound
-    )
-  )
-}
+mcs_stats(lower_bound = .25, upper_bound = .75)
 
 ```
 

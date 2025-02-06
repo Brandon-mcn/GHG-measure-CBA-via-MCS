@@ -178,3 +178,181 @@ ghg_conversion2 <- function(ref_name, intv_name, EFsim_out, ref_AD, intv_AD){
   ghg2 <- ghg2[, c("unit", setdiff(names(ghg2), "unit"))]
   assign(intv_name, ghg2, envir = .GlobalEnv)
 }
+
+### Calculate CBA indicators (NPV, LCCA) at different discount rates
+
+cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = year_count){
+  # Set discount rate variables
+  drmin_loop = dr_min*10
+  drmax_loop = dr_max*10
+  dr_count = dr_max*10 - dr_min*10 + 1
+  
+  # NPV
+  npv_private_dr <- data.frame(matrix(NA, nrow = run_count, ncol = dr_count)) # make an empty matrix to populate NPV for each discount rate
+  npv_econ_dr <- data.frame(matrix(NA, nrow = run_count, ncol = dr_count))
+  npv_social_dr <- data.frame(matrix(NA, nrow = run_count, ncol = dr_count))
+  colnames(npv_private_dr) <- seq(dr_min, dr_max, by = 0.1) # column headers for each discount rate, sequenced by 1/10 percent
+  colnames(npv_econ_dr) <- seq(dr_min, dr_max, by = 0.1)
+  colnames(npv_social_dr) <- seq(dr_min, dr_max, by = 0.1)
+  
+  for (i in drmin_loop:drmax_loop) { # the loop repeats for each discount rate in the provided range
+    drvalues <- numeric(year_count) # an empty vector 'drvalues' is created to house the loop outputs
+    drvalues[1] <- 1        
+    for (n in 2:year_count) {
+      drvalues[n] <- (1+(i/1000))^(n-1) # drvalues is populated with the discount rate conversion factor for each year
+    }
+    drvalues_df <- data.frame(t(drvalues)) # make a dataframe out of the discount rate loop output
+    colnames(drvalues_df) <- output_headers # make the column headers years
+    discount_df <- drvalues_df[rep(1, run_count),] # the discount rate vector is replicated into rows equal to the MCS run count
+    
+    annual_npv_private <- cashflow_private/discount_df # the total annual cash flow is converted into NPV
+    annual_npv_econ <- cashflow_econ/discount_df
+    annual_npv_social <- annual_npv_econ + total_coben_value # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
+    
+    npv_private_cumsum <- as.data.frame(t(apply(annual_npv_private, 1, cumsum))) # net present value is summed cumulatively for each year
+    npv_econ_cumsum <- as.data.frame(t(apply(annual_npv_econ, 1, cumsum)))
+    npv_social_cumsum <- as.data.frame(t(apply(annual_npv_social, 1, cumsum)))
+    
+    npv_private <- npv_private_cumsum[scenario_lifetime] # the total NPV is selected based on the scenario lifetime
+    npv_econ <- npv_econ_cumsum[scenario_lifetime]
+    npv_social <- npv_social_cumsum[scenario_lifetime]
+    
+    col_rename <- i/10 # rename column with the discount rate
+    colnames(npv_private) <- col_rename
+    colnames(npv_econ) <- col_rename
+    colnames(npv_social) <- col_rename
+    
+    npv_private_dr[,i+1] <- npv_private #bind the NPV values for each MCS row for the given discount rate
+    npv_econ_dr[,i+1] <- npv_econ #bind the NPV values for each MCS row for the given discount rate
+    npv_social_dr[,i+1] <- npv_social #bind the NPV values for each MCS row for the given discount rate
+  }
+  assign("npv_private_dr", npv_private_dr, envir = .GlobalEnv)
+  assign("npv_econ_dr", npv_econ_dr, envir = .GlobalEnv)
+  assign("npv_social_dr", npv_social_dr, envir = .GlobalEnv)
+  
+  # LCCA
+  ghg_cumsum_annual <- as.data.frame(t(apply(ghg_mitigation[, -1], 1, cumsum)))
+  ghg_cumsum <- ghg_cumsum_annual[scenario_lifetime]
+  ghg_dr <- data.frame(matrix(rep(ghg_cumsum[,1], dr_count), ncol = dr_count))
+  
+  lcca_private_dr <- (npv_private_dr * -1)/ghg_dr
+  lcca_econ_dr <- (npv_econ_dr * -1)/ghg_dr
+  lcca_social_dr <- (npv_social_dr * -1)/ghg_dr
+  
+  assign("lcca_private_dr", lcca_private_dr, envir = .GlobalEnv)
+  assign("lcca_econ_dr", lcca_econ_dr, envir = .GlobalEnv)
+  assign("lcca_social_dr", lcca_social_dr, envir = .GlobalEnv)
+}
+
+### Calculate Monte Carlo Simulation Statistics (lower bound, median, and upper bound)
+
+mcs_stats <- function(lower_bound = 0.25, upper_bound = .75){
+  # NPV MCS stats 
+  npv_stats <- data.frame(
+    dr = character(),
+    prv_lb = numeric(),
+    prv_median = numeric(),
+    prv_ub = numeric(),
+    econ_lb = numeric(),
+    econ_median = numeric(),
+    econ_ub = numeric(),
+    soc_ub = numeric(),
+    soc_median = numeric(),
+    sco_lb = numeric(),
+    stringsAsFactors = FALSE
+  )
+  loop_count = ncol(npv_econ_dr)
+  
+  for (i in 1:loop_count) {
+    # Extract the values for each discount rate
+    p_values <- npv_private_dr[,i]
+    e_values <- npv_econ_dr[,i]
+    s_values <- npv_social_dr[,i]
+    
+    # Calculate statistics
+    p_median <- median(p_values)        
+    p_lower_bound <- quantile(p_values, probs = lower_bound)
+    p_upper_bound <- quantile(p_values, probs = upper_bound)
+    
+    e_median <- median(e_values)        
+    e_lower_bound <- quantile(e_values, probs = lower_bound)
+    e_upper_bound <- quantile(e_values, probs = upper_bound)
+    
+    s_median <- median(s_values)        
+    s_lower_bound <- quantile(s_values, probs = lower_bound)
+    s_upper_bound <- quantile(s_values, probs = upper_bound)
+    
+    # Append results to the results dataframe
+    npv_stats <- rbind(
+      npv_stats,
+      data.frame(
+        dr = colnames(npv_econ_dr)[i],
+        prv_lb = p_lower_bound,
+        prv_median = p_median,
+        prv_ub = p_upper_bound,
+        econ_lb = e_lower_bound,
+        econ_median = e_median,
+        econ_ub = e_upper_bound,
+        soc_lb = s_lower_bound,
+        soc_median = s_median,
+        sco_ub = s_upper_bound
+      )
+    )
+  }
+  rownames(npv_stats) <- NULL
+  assign("npv_stats", npv_stats, envir = .GlobalEnv)
+  
+  # LCCA MCS stats 
+  lcca_stats <- data.frame(
+    dr = character(),
+    prv_lb = numeric(),
+    prv_median = numeric(),
+    prv_ub = numeric(),
+    econ_lb = numeric(),
+    econ_median = numeric(),
+    econ_ub = numeric(),
+    soc_ub = numeric(),
+    soc_median = numeric(),
+    sco_lb = numeric(),
+    stringsAsFactors = FALSE
+  )
+ 
+  for (i in 1:loop_count) {
+    # Extract the values for each discount rate
+    p_values <- lcca_private_dr[,i]
+    e_values <- lcca_econ_dr[,i]
+    s_values <- lcca_social_dr[,i]
+    
+    # Calculate statistics
+    p_median <- median(p_values)        
+    p_lower_bound <- quantile(p_values, probs = lower_bound)
+    p_upper_bound <- quantile(p_values, probs = upper_bound)
+    
+    e_median <- median(e_values)        
+    e_lower_bound <- quantile(e_values, probs = lower_bound)
+    e_upper_bound <- quantile(e_values, probs = upper_bound)
+    
+    s_median <- median(s_values)        
+    s_lower_bound <- quantile(s_values, probs = lower_bound)
+    s_upper_bound <- quantile(s_values, probs = upper_bound)
+    
+    # Append results to the results dataframe
+    lcca_stats <- rbind(
+      lcca_stats,
+      data.frame(
+        dr = colnames(npv_econ_dr)[i],
+        prv_lb = p_lower_bound,
+        prv_median = p_median,
+        prv_ub = p_upper_bound,
+        econ_lb = e_lower_bound,
+        econ_median = e_median,
+        econ_ub = e_upper_bound,
+        soc_lb = s_lower_bound,
+        soc_median = s_median,
+        sco_ub = s_upper_bound
+      )
+    )
+  }
+  rownames(lcca_stats) <- NULL
+  assign("lcca_stats", lcca_stats, envir = .GlobalEnv)
+}
