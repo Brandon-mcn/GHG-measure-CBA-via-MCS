@@ -69,10 +69,10 @@ EFL_co2e <- function(GWP){
 ### Normal Distribution Function
 
 normal_PDF <- function(param_name, mean, sd, units) {
-  mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
+  mcs_out <- data.frame(matrix(ncol = scenario_years, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
     value <- rnorm(1, mean, sd) # Loop through each row, generate a single random value from normal distribution
-    mcs_out[i, ] <- rep(value, year_count) # Fill the entire row with the same value
+    mcs_out[i, ] <- rep(value, scenario_years) # Fill the entire row with the same value
   }
   mcs_out <- as.data.frame(mcs_out)
   colnames(mcs_out) <- output_headers # Assign column names
@@ -85,10 +85,10 @@ normal_PDF <- function(param_name, mean, sd, units) {
 ### continuous uniform parameter 1 - Select random value and assign it to all scenario years in one MCS trial
 
 continuous_uniform1 <- function(param_name, minvalue, maxvalue, units){
-  mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
+  mcs_out <- data.frame(matrix(ncol = scenario_years, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
     random_value <- runif(1, min = minvalue, max = maxvalue)
-    param_sim <- rep(random_value, times = year_count)
+    param_sim <- rep(random_value, times = scenario_years)
     mcs_out[i, ] <- param_sim
   }
   mcs_out <- as.data.frame(mcs_out)
@@ -102,9 +102,9 @@ continuous_uniform1 <- function(param_name, minvalue, maxvalue, units){
 ### continuous uniform parameter 2 - randomly assign a value to each scenario year 
 
 continuous_uniform2 <- function(param_name, minvalue, maxvalue, units){
-  mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
+  mcs_out <- data.frame(matrix(ncol = scenario_years, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
-    param_sim <- runif(year_count, min = minvalue, max = maxvalue)
+    param_sim <- runif(scenario_years, min = minvalue, max = maxvalue)
     mcs_out[i, ] <- param_sim
   }
   mcs_out <- as.data.frame(mcs_out)
@@ -118,10 +118,10 @@ continuous_uniform2 <- function(param_name, minvalue, maxvalue, units){
 ### discrete uniform parameter 1 - Select random value and assign it to all scenario years in one MCS trial
 
 discrete_uniform1 <- function(param_name, minvalue, maxvalue, units){
-  mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
+  mcs_out <- data.frame(matrix(ncol = scenario_years, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
     random_value <- sample(minvalue:maxvalue, size = 1)
-    param_sim <- rep(random_value, times = year_count)
+    param_sim <- rep(random_value, times = scenario_years)
     mcs_out[i, ] <- param_sim
   }
   mcs_out <- as.data.frame(mcs_out)
@@ -135,9 +135,9 @@ discrete_uniform1 <- function(param_name, minvalue, maxvalue, units){
 ### discrete uniform parameter 2 - randomly assign a value to each scenario year 
 
 discrete_uniform2 <- function(param_name, minvalue, maxvalue, units){
-  mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
+  mcs_out <- data.frame(matrix(ncol = scenario_years, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
-    param_sim <- sample(minvalue:maxvalue, size = year_count)
+    param_sim <- sample(minvalue:maxvalue, size = scenario_years)
     mcs_out[i, ] <- param_sim
   }
   mcs_out <- as.data.frame(mcs_out)
@@ -150,11 +150,11 @@ discrete_uniform2 <- function(param_name, minvalue, maxvalue, units){
 
 ### discrete uniform parameter 3 - select random value and assign it for a specific number of scenario years, then default to a secondary value
 
-discrete_uniform3 <- function(param_name, minvalue, maxvalue, lifetime, value2 = 0, units){
-  mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
+discrete_uniform3 <- function(param_name, minvalue, maxvalue, nyears, value2 = 0, units){
+  mcs_out <- data.frame(matrix(ncol = scenario_years, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
     random_value <- sample(minvalue:maxvalue, size = 1)
-    param_sim <- c(rep(random_value, times = lifetime),rep(value2, times = year_count - lifetime))
+    param_sim <- c(rep(random_value, times = nyears),rep(value2, times = scenario_years - nyears))
     mcs_out[i, ] <- param_sim
   }
   mcs_out <- as.data.frame(mcs_out)
@@ -168,7 +168,7 @@ discrete_uniform3 <- function(param_name, minvalue, maxvalue, lifetime, value2 =
 ### Static value parameter
 
 static_value <- function(param_name, value, units){
-  mcs_out <- data.frame(matrix(value, nrow = run_count, ncol = year_count))
+  mcs_out <- data.frame(matrix(value, nrow = run_count, ncol = scenario_years))
   colnames(mcs_out) <- output_headers # Assign column names
   mcs_out <- mcs_out %>%
     mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
@@ -182,7 +182,7 @@ scenario_MCS <- function(param_name, sheet_name, units){
   df <- read_excel("scenarios.xlsx", sheet = sheet_name)
   colfilter <- c("scenario_prob", output_headers)
   df_scenarios <- df[, colfilter]
-  mcs_out <- data.frame(matrix(ncol = year_count + 1, nrow = run_count))
+  mcs_out <- data.frame(matrix(ncol = scenario_years + 1, nrow = run_count))
   for (i in 1:run_count) {
     scenario_selection <- df_scenarios[sample(nrow(df_scenarios), size = 1, prob = df_scenarios$scenario_prob), ]
     mcs_out[i, ] <- scenario_selection
@@ -195,22 +195,22 @@ scenario_MCS <- function(param_name, sheet_name, units){
   assign(param_name, mcs_out, envir = .GlobalEnv)
 }
 
-### Activity data calculation
+### Activity data calculation 1 - Reference scenario is a baseline, intervention is a % reduction from the baseline
 
-calculate_AD1 <- function(ref_name, intv_name, boundary_data, ref_mean, ref_sd, intv_min, intv_max, units){
+calc_ad1 <- function(ref_name, intv_name, boundary_df, ref_pdf, ref_params, intv_pdf, intv_params, intv_life, units){
   #initiate empty dataframe 
-  ref_out <- matrix(0, nrow = run_count, ncol = year_count)
-  intv_out <- matrix(0, nrow = run_count, ncol = year_count)
+  ref_out <- matrix(0, nrow = run_count, ncol = scenario_years)
+  intv_out <- matrix(0, nrow = run_count, ncol = scenario_years)
   
   for (i in 1:run_count) {
-    for (j in 1:year_count) {
-      n <- boundary_data[i, (j+1)] # Because the boundary data has a leading unit column, j is shifted over by 1
+    for (j in 1:scenario_years) {
+      n <- boundary_df[i, (j+1)] # Because the boundary data has a leading unit column, j is shifted over by 1
       
-      # Generate reference and intervention factors for each intervention instance
-      ref_sim <- rnorm(n, ref_mean, ref_sd) # Simulate energy consumption for each home
-      intv_savings <- runif(n, intv_min, intv_max) # Simulate energy savings for each home
-      intv_factors <- 1-intv_savings # Calculate energy savings factor for each home (inverse of intv_savings)
-      intv_sim <- ref_sim * intv_factors # calculate intervention energy consumption for each home
+      # Simulate reference and intervention scenarios for each intervention instance
+      ref_sim <- do.call(ref_pdf, c(list(n), ref_params)) # Simulate activity data for each instance
+      intv_factors <- do.call(intv_pdf, c(list(n), intv_params)) # Simulate the activity reduction factor for each instance
+      intv_savings <- 1-intv_factors # inverse of intv_factor
+      intv_sim <- ref_sim * intv_savings # calculate intervention activity data for each instance
       
       # Sum the total activity data 
       ref_sum <- sum(ref_sim) # sum of reference energy consumption for all homes
@@ -221,6 +221,9 @@ calculate_AD1 <- function(ref_name, intv_name, boundary_data, ref_mean, ref_sd, 
       intv_out[i, j] <- intv_sum
     }
   }
+  
+  #ref_out_subest <- ref_out[, (intv_years + 1):(intv_years + intv_life)]
+  #ref_out_subset2 <- ref_out[, 1:(intv_years + intv_life)]
   
   ref_out <- as.data.frame(ref_out)
   colnames(ref_out) <- output_headers
@@ -241,13 +244,13 @@ calculate_AD1 <- function(ref_name, intv_name, boundary_data, ref_mean, ref_sd, 
 
 assign_projecttype <- function(intervention_sim){
   # Initialize empty matrices for each energy efficiency project type
-  ashp_bound <- matrix(0, nrow = run_count, ncol = year_count)
-  weatherize_bound <- matrix(0, nrow = run_count, ncol = year_count)
-  hpwh_bound <- matrix(0, nrow = run_count, ncol = year_count)
+  ashp_bound <- matrix(0, nrow = run_count, ncol = scenario_years)
+  weatherize_bound <- matrix(0, nrow = run_count, ncol = scenario_years)
+  hpwh_bound <- matrix(0, nrow = run_count, ncol = scenario_years)
   
   # Loop through each cell in the dataframe
   for (i in 1:run_count) {
-    for (j in 1:year_count) {
+    for (j in 1:scenario_years) {
       value <- intervention_sim[i, (j+1)]  # Get the original value, because the boundary data has a leading unit column, j is shifted over by 1
       
       # Generate random assignments for A, B, and C
@@ -304,11 +307,11 @@ cumul_sum <- function(param_name, df){
 
 calculate_capex <- function(ref_name, intv_name, ref_bound, intv_bound, capex_min, capex_max, units){
   #initiate empty dataframe 
-  ref_out <- matrix(0, nrow = run_count, ncol = year_count)
-  intv_out <- matrix(0, nrow = run_count, ncol = year_count)
+  ref_out <- matrix(0, nrow = run_count, ncol = scenario_years)
+  intv_out <- matrix(0, nrow = run_count, ncol = scenario_years)
   
   for (i in 1:run_count) {
-    for (j in 1:year_count) {
+    for (j in 1:scenario_years) {
       nr <- ref_bound[i, (j+1)] # Because the boundary data has a leading unit column, j is shifted over by 1
       ni <- intv_bound[i, (j+1)]
       
@@ -345,11 +348,11 @@ calculate_capex <- function(ref_name, intv_name, ref_bound, intv_bound, capex_mi
 
 calculate_opex <- function(ref_name, intv_name, ref_ad, intv_ad, opex, units){
   #initiate empty dataframe 
-  ref_out <- matrix(0, nrow = run_count, ncol = year_count)
-  intv_out <- matrix(0, nrow = run_count, ncol = year_count)
+  ref_out <- matrix(0, nrow = run_count, ncol = scenario_years)
+  intv_out <- matrix(0, nrow = run_count, ncol = scenario_years)
   
   for (i in 1:run_count) {
-    for (j in 1:year_count) {
+    for (j in 1:scenario_years) {
       nr <- ref_ad[i, (j+1)] # Because the activity data has a leading unit column, j is shifted over by 1
       ni <- intv_ad[i, (j+1)]
       
@@ -404,7 +407,7 @@ ghg_conversion1 <- function(ref_name,
                 subregion == fltr.subregion &
                 unit == fltr.unit]
   EF_value <- EF_row$kgco2e_perunit
-  EF_df <- data.frame(matrix(EF_value, nrow = run_count, ncol = year_count))
+  EF_df <- data.frame(matrix(EF_value, nrow = run_count, ncol = scenario_years))
   
   ref_ghg <- EF_df * ref_ad[, -1]
   colnames(ref_ghg) <- output_headers
@@ -459,7 +462,7 @@ ghg_conversion3 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
 
 ### Calculate CBA indicators (NPV, LCCA) at different discount rates
 
-cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = year_count){
+cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = scenario_years){
   # Set discount rate variables
   drmin_loop = dr_min*10
   drmax_loop = dr_max*10
@@ -474,9 +477,9 @@ cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = year_count){
   colnames(npv_social_dr) <- seq(dr_min, dr_max, by = 0.1)
   
   for (i in drmin_loop:drmax_loop) { # the loop repeats for each discount rate in the provided range
-    drvalues <- numeric(year_count) # an empty vector 'drvalues' is created to house the loop outputs
+    drvalues <- numeric(scenario_years) # an empty vector 'drvalues' is created to house the loop outputs
     drvalues[1] <- 1        
-    for (n in 2:year_count) {
+    for (n in 2:scenario_years) {
       drvalues[n] <- (1+(i/1000))^(n-1) # drvalues is populated with the discount rate conversion factor for each year
     }
     drvalues_df <- data.frame(t(drvalues)) # make a dataframe out of the discount rate loop output

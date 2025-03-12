@@ -26,8 +26,10 @@ Set up global variables
 # Define the following global variables to be called by parameter functions
 run_count <- 1000
 scenario_start <- 2026
-scenario_end  <- 2040
-year_count <- scenario_end - scenario_start + 1
+intv_years <- 10 # The number of years the intervention will be implemented
+intv_lifetime <- 15 # The number of years the intervention generates benefits, generally the expected lifetime of equipment
+scenario_end  <- scenario_start + intv_years + intv_lifetime - 1
+scenario_years <- scenario_end - scenario_start + 1
 output_headers <- scenario_start:scenario_end
 ```
 
@@ -59,35 +61,39 @@ Boundary Simulations
 static_value("ref_boundary_mgnl", 0, units = "project count")
 
 # Intervention boundary is modeled as a random value between 120 and 160.
-discrete_uniform2("intv_boundary_mgnl", minvalue = 120, maxvalue = 160, units = "project count")
+# The program is assumed to have funding for 10 years. After that, no more homes are funded. 
+discrete_uniform3("intv_boundary_mgnl", minvalue = 120, maxvalue = 160, nyears = intv_years, value2 = 0, units = "project count")
 
 # Project types are randomly assigned for the intervention boundary, with three new dataframes for each project type.
 assign_projecttype(intv_boundary_mgnl)
-
-# Calculate cumulative project counts for each project type
-cumul_sum("ashp_boundary", ashp_boundary_mgnl)
-cumul_sum("weatherize_boundary", weatherize_boundary_mgnl)
-cumul_sum("hpwh_boundary", hpwh_boundary_mgnl)
 
 ```
 
 Air source heat pumps (ASHP): Activity data, cost, and GHG simulations
 ```{r}
-# ASHP factor 1 simulates the annual electricity consumption for space heating and cooling in a residential home
-# The reference factor is simulated for each home based on a normal distribution 
-# The intervention factor is simulated for each home based on a uniform distribution
-# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("ashp_ref_ann_data1", "ashp_intv_ann_data1", ashp_boundary_mgnl, ref_mean = 4146, ref_sd = 233, intv_min = 0.31, intv_max = 0.47, units = "kWh")
+# Simulate annual electricity consumption for space heating and cooling. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
+calc_ad1("ashp_ref_ann_data1",
+         "ashp_intv_ann_data1",
+         ashp_boundary_mgnl, 
+         ref_pdf = rnorm,
+         ref_params = list(mean = 4161, sd = 233), # Reference electricity consumption is modeled with a normal distribution
+         intv_pdf = runif, 
+         intv_params = list(min = 0.31, max = 0.47), # Intervention factor, % savings, is modeled with a uniform distribution  
+         units = "kWh")
 
 # Calculate cumulative activity data
 cumul_sum("ashp_ref_data1", ashp_ref_ann_data1)
 cumul_sum("ashp_intv_data1", ashp_intv_ann_data1)
 
-# ASHP factor 2 simulates the annual natural gas consumption for space heating and cooling in a residential home
-# The reference factor is simulated for each home based on a normal distribution 
-# The intervention factor is simulated for each home based on a uniform distribution
-# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("ashp_ref_ann_data2", "ashp_intv_ann_data2", ashp_boundary_mgnl, ref_mean = 603, ref_sd = 11.3, intv_min = 0.31, intv_max = 0.47, units = "therms")
+# Simulate annual natural gas consumption for space heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
+calc_ad1("ashp_ref_ann_data2",
+         "ashp_intv_ann_data2",
+         ashp_boundary_mgnl, 
+         ref_pdf = rnorm,
+         ref_params = list(mean = 603, sd = 11.3), # Reference natural gas consumption is modeled with a normal distribution
+         intv_pdf = runif, 
+         intv_params = list(min = 0.31, max = 0.47), # Intervention factor, % savings,is modeled with a uniform distribution  
+         units = "therms")
 
 # Calculate cumulative activity data
 cumul_sum("ashp_ref_data2", ashp_ref_ann_data2)
@@ -136,21 +142,29 @@ ashp_intv_ghg_total <- ashp_intv_ghg_natgas[, -1] + ashp_intv_ghg_elec[, -1] + a
 
 Weatherization: Activity data, cost, and GHG simulations
 ```{r}
-# Weatherization factor 1 simulates the annual electricity consumption for space heating and cooling in a residential home
-# The reference factor is simulated for each home based on a normal distribution 
-# The intervention factor is simulated for each home based on a uniform distribution
-# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("weatherize_ref_ann_data1", "weatherize_intv_ann_data1", weatherize_boundary_mgnl, ref_mean = 4146, ref_sd = 233, intv_min = 0.10, intv_max = 0.20, units = "kWh")
+# Simulate annual electricity consumption for space heating and cooling. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
+calc_ad1("weatherize_ref_ann_data1",
+         "weatherize_intv_ann_data1",
+         weatherize_boundary_mgnl, 
+         ref_pdf = rnorm,
+         ref_params = list(mean = 4161, sd = 233), # Reference electricity consumption is modeled with a normal distribution
+         intv_pdf = runif, 
+         intv_params = list(min = 0.10, max = 0.20), # Intervention factor, % savings, is modeled with a uniform distribution  
+         units = "kWh")
 
 # Calculate cumulative activity data
 cumul_sum("weatherize_ref_data1", weatherize_ref_ann_data1)
 cumul_sum("weatherize_intv_data1", weatherize_intv_ann_data1)
 
-# Weatherization factor 2 simulates the annual natural gas consumption for space heating and cooling in a residential home
-# The reference factor is simulated for each home based on a normal distribution 
-# The intervention factor is simulated for each home based on a uniform distribution
-# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("weatherize_ref_ann_data2", "weatherize_intv_ann_data2", weatherize_boundary_mgnl, ref_mean = 603, ref_sd = 11.3, intv_min = 0.10, intv_max = 0.20, units = "therms")
+# Simulate annual natural gas consumption for space heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
+calc_ad1("weatherize_ref_ann_data2",
+         "weatherize_intv_ann_data2",
+         weatherize_boundary_mgnl, 
+         ref_pdf = rnorm,
+         ref_params = list(mean = 603, sd = 11.3), # Reference natural gas consumption is modeled with a normal distribution
+         intv_pdf = runif, 
+         intv_params = list(min = 0.10, max = 0.20), # Intervention factor, % savings,is modeled with a uniform distribution  
+         units = "therms")
 
 # Calculate cumulative activity data
 cumul_sum("weatherize_ref_data2", weatherize_ref_ann_data2)
@@ -199,21 +213,29 @@ weatherize_intv_ghg_total <- weatherize_intv_ghg_natgas[, -1] + weatherize_intv_
 
 Heat Pump Water Heater (HPWH): Activity data, cost, and GHG simulations
 ```{r}
-# HPWH factor 1 simulates the annual electricity consumption for water heating in a residential home
-# The reference factor is simulated for each home based on a normal distribution 
-# The intervention factor is simulated for each home based on a uniform distribution
-# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("hpwh_ref_ann_data1", "hpwh_intv_ann_data1", hpwh_boundary_mgnl, ref_mean = 2969, ref_sd = 108.1, intv_min = 0.30, intv_max = 0.70, units = "kWh")
+# Simulate annual electricity consumption for water heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
+calc_ad1("hpwh_ref_ann_data1",
+         "hpwh_intv_ann_data1",
+         hpwh_boundary_mgnl, 
+         ref_pdf = rnorm,
+         ref_params = list(mean = 2969, sd = 108.1), # Reference electricity consumption is modeled with a normal distribution
+         intv_pdf = runif, 
+         intv_params = list(min = 0.30, max = 0.70), # Intervention factor, % savings, is modeled with a uniform distribution  
+         units = "kWh")
 
 # Calculate cumulative activity data
 cumul_sum("hpwh_ref_data1", hpwh_ref_ann_data1)
 cumul_sum("hpwh_intv_data1", hpwh_intv_ann_data1)
 
-# HPWH factor 2 simulates the annual natural gas consumption for water heating in a residential home
-# The reference factor is simulated for each home based on a normal distribution 
-# The intervention factor is simulated for each home based on a uniform distribution
-# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("hpwh_ref_ann_data2", "hpwh_intv_ann_data2", hpwh_boundary_mgnl, ref_mean = 237, ref_sd = 4, intv_min = 0.30, intv_max = 0.70, units = "therms")
+# Simulate annual natural gas consumption for space heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
+calc_ad1("hpwh_ref_ann_data2",
+         "hpwh_intv_ann_data2",
+         hpwh_boundary_mgnl, 
+         ref_pdf = rnorm,
+         ref_params = list(mean = 237, sd = 4), # Reference natural gas consumption is modeled with a normal distribution
+         intv_pdf = runif, 
+         intv_params = list(min = 0.30, max = 0.70), # Intervention factor, % savings,is modeled with a uniform distribution  
+         units = "therms")
 
 # Calculate cumulative activity data
 cumul_sum("hpwh_ref_data2", hpwh_ref_ann_data2)
@@ -322,7 +344,6 @@ cashflow_private <- cashflow_econ # This is a space holder for now. This could u
 Excel Exports
 ```{r}
 ashp_outputlist <- (list("ashp_boundary_mgnl" = ashp_boundary_mgnl,
-                         "ashp_boundary" = ashp_boundary,
                          "ashp_ref_ann_data1" = ashp_ref_ann_data1,
                          "ashp_ref_ann_data2" = ashp_ref_ann_data2,
                          "ashp_ref_data1" = ashp_ref_data1,
@@ -352,7 +373,6 @@ ashp_outputlist <- (list("ashp_boundary_mgnl" = ashp_boundary_mgnl,
 )
 
 weatherize_outputlist <- (list("weatherize_boundary_mgnl" = weatherize_boundary_mgnl,
-                         "weatherize_boundary" = weatherize_boundary,
                          "weatherize_ref_ann_data1" = weatherize_ref_ann_data1,
                          "weatherize_ref_ann_data2" = weatherize_ref_ann_data2,
                          "weatherize_ref_data1" = weatherize_ref_data1,
@@ -382,7 +402,6 @@ weatherize_outputlist <- (list("weatherize_boundary_mgnl" = weatherize_boundary_
 )
 
 hpwh_outputlist <- (list("hpwh_boundary_mgnl" = hpwh_boundary_mgnl,
-                         "hpwh_boundary" = hpwh_boundary,
                          "hpwh_ref_ann_data1" = hpwh_ref_ann_data1,
                          "hpwh_ref_ann_data2" = hpwh_ref_ann_data2,
                          "hpwh_ref_data1" = hpwh_ref_data1,
@@ -444,7 +463,7 @@ CBA Indicator calcs with discount rate range and Monte Carlo Minulation statisti
 ```{r}
 # Calculates three seperate tables of NPV for private, economic and social costs, using the range of discount rates provided
 
-cba_discountrange(dr_min = 0, dr_max = 7, scenario_lifetime = year_count)
+cba_discountrange(dr_min = 0, dr_max = 7, scenario_lifetime = scenario_years)
 
 # Calculates statistics for the Monte Carlo Simulation (lower bound, median, and upper bound)
 
