@@ -1,18 +1,9 @@
 ---
-title: Monte Carlo Simulation for GHG Measure CBA
-author: Brandon
+title: Monte Carlo Simulation for City of Flagstaff Home Weatherization and Energy Rebate Program
+author: Brandon McNamara
 project: Dissertation chapter 3
-date: Jan 31, 2025
+date: March 11, 2025
 ---
-
-TO-DO:
-1. Add description here. Boundary acts like a single functional unit. Each parameter is a single functional unit with multiple GHG, non-GHG, and cost factors.
-
-2. Consider how to deal with scope 3 EFs. Electricity for example, has upstream factors. Combine into one electricity EF? Or keep separate for in/out of jurisdiction reporting? 
-
-3. add costs to excel export. Think about how to export discounted costs
-
-4. Turn each MCS loop into a function. A different function for the different PDF types
 
 Package Install & Load
 ```{r setup}
@@ -34,8 +25,8 @@ Set up global variables
 ```{r}
 # Define the following global variables to be called by parameter functions
 run_count <- 1000
-scenario_start <- 2025
-scenario_end  <- 2050
+scenario_start <- 2026
+scenario_end  <- 2040
 year_count <- scenario_end - scenario_start + 1
 output_headers <- scenario_start:scenario_end
 ```
@@ -56,29 +47,32 @@ Emission Factor Simulations
 scenario.MCS("electricity_ef")
 ```
 
-Parameter 1 Boundary Simulations
+Boundary Simulations
 ```{r}
-# Reference boundary represents zero homes funded each year
+# Reference boundary represents zero energy efficiency upgrades in each year
 static.value("ref_boundary", 0)
 
-# Intervention boundary is modeled as a random value between 18 and 21 for out through 2035 (11 years), then zero home per year afterwards.
-random.value("intv_boundary", minvalue = 18, maxvalue = 21, lifetime = 11, value2 = 0)
+# Intervention boundary is modeled as a random value between 120 and 160.
+discrete.uniform3("intv_boundary", minvalue = 120, maxvalue = 160)
 
-# Transform boundary data from annual totals to cumulative totals
+# Project types are randomly assigned for the intervention boundary, with three new dataframes for each project type.
+assign.project.type(intv_boundary)
 
-ref_boundary_cumsum <- as.data.frame(t(apply(ref_boundary, 1, cumsum))) # cumulative reference boundary.
-intv_boundary_cumsum <- as.data.frame(t(apply(intv_boundary, 1, cumsum))) # cumulative intervention boundary
-net_boundary_cumsum <- intv_boundary_cumsum-ref_boundary_cumsum # net cumulative boundary
+# Calculate cumulative project counts for each project type
+ashp_boundary_cumsum <- as.data.frame(t(apply(ashp_count, 1, cumsum))) 
+weatherize_boundary_cumsum <- as.data.frame(t(apply(weatherize_count, 1, cumsum))) 
+hpwh_boundary_cumsum <- as.data.frame(t(apply(hpwh_count, 1, cumsum))) 
 
 ```
 
-Parameter 1 Factor Simulations
+Air source heat pumps (ASHP): simulations
 ```{r}
-# Reference factor 1 represents the annual electricity consumption for a residential home, assumed to be 9823 kwh
-static.value("ref_factor1", 9823)
+# ASHP factor 1 simulates the annual electricity consumption for space heating and cooling in a residential home
+# The intervention factor is also calcualted - ADD MORE
+calculate.AD("ashp_ref1", "ashp_intv1", ashp_count, ref_mean = 4146, ref_sd = 233, intv_min = 0.31, intv_max = 0.47, "kWh")
 
-# Reference factor 2 represents the annual natural gas consumption for a residential home, assumed to be 118 therms
-static.value("ref_factor2", 118)
+# ASHP Reference factor 2 simulates the annual natural gas consumption for space heating and cooling in a residential home
+normal.PDF("ashp_ref2", 603, 11.3)
 
 # Intervention factor 1 represents energy savings potential of the measure, provided as a % reduction in energy use. 
 # The energy savings is applied to both electricity and natural gas
