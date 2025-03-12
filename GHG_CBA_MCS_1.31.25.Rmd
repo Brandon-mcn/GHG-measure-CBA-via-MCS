@@ -38,53 +38,56 @@ source("parameter_functions.r")
 
 Create CO2e Emission Factor Library
 ```{r}
-EFL.co2e("ar6")
+EFL_co2e("ar6")
 write_xlsx(EFL, path = "EFLco2e.xlsx")
 ```
 
 Emission Factor Simulations
 ```{r}
-scenario.MCS("electricity_ef")
+scenario_MCS("electricity_ef", units = "kgco2e/kWh")
 ```
 
 Boundary Simulations
 ```{r}
 # Reference boundary represents zero energy efficiency upgrades in each year
-static.value("ref_boundary", 0)
+static_value("ref_boundary", 0, units = "project count")
 
 # Intervention boundary is modeled as a random value between 120 and 160.
-discrete.uniform3("intv_boundary", minvalue = 120, maxvalue = 160)
+discrete_uniform3("intv_boundary", minvalue = 120, maxvalue = 160, units = "project count")
 
 # Project types are randomly assigned for the intervention boundary, with three new dataframes for each project type.
-assign.project.type(intv_boundary)
+assign_projecttype(intv_boundary)
 
 # Calculate cumulative project counts for each project type
-ashp_boundary_cumsum <- as.data.frame(t(apply(ashp_count, 1, cumsum))) 
-weatherize_boundary_cumsum <- as.data.frame(t(apply(weatherize_count, 1, cumsum))) 
-hpwh_boundary_cumsum <- as.data.frame(t(apply(hpwh_count, 1, cumsum))) 
+cumul_sum("asph_cumulcount", ashp_count)
+cumul_sum("weatherize_cumulcount", weatherize_count)
+cumul_sum("hpwh_cumulcount", hpwh_count)
 
 ```
 
-Air source heat pumps (ASHP): simulations
+Air source heat pumps (ASHP): Activity data, cost, and GHG simulations
 ```{r}
 # ASHP factor 1 simulates the annual electricity consumption for space heating and cooling in a residential home
-# The intervention factor is also calcualted - ADD MORE
-calculate.AD("ashp_ref1", "ashp_intv1", ashp_count, ref_mean = 4146, ref_sd = 233, intv_min = 0.31, intv_max = 0.47, "kWh")
+# The reference factor is simulated for each home based on a normal distribution 
+# The intervention factor is simulated for each home based on a uniform distribution
+# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
+calculate_AD1("ashp_ref1", "ashp_intv1", ashp_count, ref_mean = 4146, ref_sd = 233, intv_min = 0.31, intv_max = 0.47, units = "kWh")
 
-# ASHP Reference factor 2 simulates the annual natural gas consumption for space heating and cooling in a residential home
-normal.PDF("ashp_ref2", 603, 11.3)
+# ASHP factor 2 simulates the annual natural gas consumption for space heating and cooling in a residential home
+# The reference factor is simulated for each home based on a normal distribution 
+# The intervention factor is simulated for each home based on a uniform distribution
+# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
+calculate_AD1("ashp_ref2", "ashp_intv2", ashp_count, ref_mean = 603, ref_sd = 11.3, intv_min = 0.31, intv_max = 0.47, units = "therms")
 
-# Intervention factor 1 represents energy savings potential of the measure, provided as a % reduction in energy use. 
-# The energy savings is applied to both electricity and natural gas
-# The energy savings is modeled as a normal distribution: mean = 30% sd = 3%
-# The selected value for each simulation is applied consistently over the scenario lifetime.
-normal.PDF("intv_factor1", .3, .03)
+# ASHP Capex is calculated by simulating the installation costs for each home
+calculate_capex("ashp_refcapex", "ashp_intvcapex", ref_boundary, ashp_count, capex_min = 2100, capex_max = 6000, units = "USD")
 
-# Calculate cumulative activity data for factor 1 (electricity, kWh)
-calculate.AD("ref_AD1", "intv_AD1", net_boundary_cumsum, ref_factor1, intv_factor1, "kWh")
+# ASHP Opex is calculated for electricity and natural gas seperatly, based on current energy prices
+calculate_opex("ashp_refopex1", "ashp_intvopex1", ashp_ref1, ashp_intv1, opex = 0.1542, units = "USD")
+calculate_opex("ashp_refopex2", "ashp_intvopex2", ashp_ref2, ashp_intv2, opex = 0.3434, units = "therms")
 
-# Calculate cumulative activity data for factor 2 (natural gas, therms)
-calculate.AD("ref_AD2", "intv_AD2", net_boundary_cumsum, ref_factor2, intv_factor1, "therms")
+
+
 ```
 
 Parameter 1 Cost Simulations
