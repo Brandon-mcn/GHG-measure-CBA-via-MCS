@@ -82,9 +82,9 @@ normal_PDF <- function(param_name, mean, sd, units) {
   assign(param_name, mcs_out, envir = .GlobalEnv) # Assign the generated dataframe to the specified name in the global environment
 }
 
-### continuous uniform parameter
+### continuous uniform parameter 1 - Select random value and assign it to all scenario years in one MCS trial
 
-continuous_uniform <- function(param_name, minvalue, maxvalue, units){
+continuous_uniform1 <- function(param_name, minvalue, maxvalue, units){
   mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
     random_value <- runif(1, min = minvalue, max = maxvalue)
@@ -99,7 +99,23 @@ continuous_uniform <- function(param_name, minvalue, maxvalue, units){
   assign(param_name, mcs_out, envir = .GlobalEnv) # Assign the generated dataframe to the specified name in the global environment
 }
 
-### discrete uniform parameter 1 - Select random value and assign it to for all scenario years
+### continuous uniform parameter 2 - randomly assign a value to each scenario year 
+
+continuous_uniform2 <- function(param_name, minvalue, maxvalue, units){
+  mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
+  for (i in 1:run_count) {
+    param_sim <- runif(year_count, min = minvalue, max = maxvalue)
+    mcs_out[i, ] <- param_sim
+  }
+  mcs_out <- as.data.frame(mcs_out)
+  colnames(mcs_out) <- output_headers # Assign column names
+  mcs_out <- mcs_out %>%
+    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
+    select(unit, everything())  # Move "unit" to the first position
+  assign(param_name, mcs_out, envir = .GlobalEnv) # Assign the generated dataframe to the specified name in the global environment
+}
+
+### discrete uniform parameter 1 - Select random value and assign it to all scenario years in one MCS trial
 
 discrete_uniform1 <- function(param_name, minvalue, maxvalue, units){
   mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
@@ -116,13 +132,12 @@ discrete_uniform1 <- function(param_name, minvalue, maxvalue, units){
   assign(param_name, mcs_out, envir = .GlobalEnv) # Assign the generated dataframe to the specified name in the global environment
 }
 
-### discrete uniform parameter 2 - select random value and assign it for a specific number of scenario years, then default to a secondary value
+### discrete uniform parameter 2 - randomly assign a value to each scenario year 
 
-discrete_uniform2 <- function(param_name, minvalue, maxvalue, lifetime, value2 = 0, units){
+discrete_uniform2 <- function(param_name, minvalue, maxvalue, units){
   mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
-    random_value <- sample(minvalue:maxvalue, size = 1)
-    param_sim <- c(rep(random_value, times = lifetime),rep(value2, times = year_count - lifetime))
+    param_sim <- sample(minvalue:maxvalue, size = year_count)
     mcs_out[i, ] <- param_sim
   }
   mcs_out <- as.data.frame(mcs_out)
@@ -133,12 +148,13 @@ discrete_uniform2 <- function(param_name, minvalue, maxvalue, lifetime, value2 =
   assign(param_name, mcs_out, envir = .GlobalEnv) # Assign the generated dataframe to the specified name in the global environment
 }
 
-### discrete uniform parameter 3 - randomly assign a value to each scenario year 
+### discrete uniform parameter 3 - select random value and assign it for a specific number of scenario years, then default to a secondary value
 
-discrete_uniform3 <- function(param_name, minvalue, maxvalue, units){
+discrete_uniform3 <- function(param_name, minvalue, maxvalue, lifetime, value2 = 0, units){
   mcs_out <- data.frame(matrix(ncol = year_count, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
-    param_sim <- sample(minvalue:maxvalue, size = year_count)
+    random_value <- sample(minvalue:maxvalue, size = 1)
+    param_sim <- c(rep(random_value, times = lifetime),rep(value2, times = year_count - lifetime))
     mcs_out[i, ] <- param_sim
   }
   mcs_out <- as.data.frame(mcs_out)
@@ -162,8 +178,8 @@ static_value <- function(param_name, value, units){
 
 ### Scenario selection formula
 
-scenario_MCS <- function(param_name, units){
-  df <- read_excel("scenarios.xlsx", sheet = param_name)
+scenario_MCS <- function(param_name, sheet_name, units){
+  df <- read_excel("scenarios.xlsx", sheet = sheet_name)
   colfilter <- c("scenario_prob", output_headers)
   df_scenarios <- df[, colfilter]
   mcs_out <- data.frame(matrix(ncol = year_count + 1, nrow = run_count))
@@ -225,14 +241,14 @@ calculate_AD1 <- function(ref_name, intv_name, boundary_data, ref_mean, ref_sd, 
 
 assign_projecttype <- function(intervention_sim){
   # Initialize empty matrices for each energy efficiency project type
-  ashp_count <- matrix(0, nrow = run_count, ncol = year_count)
-  weatherize_count <- matrix(0, nrow = run_count, ncol = year_count)
-  hpwh_count <- matrix(0, nrow = run_count, ncol = year_count)
+  ashp_bound <- matrix(0, nrow = run_count, ncol = year_count)
+  weatherize_bound <- matrix(0, nrow = run_count, ncol = year_count)
+  hpwh_bound <- matrix(0, nrow = run_count, ncol = year_count)
   
   # Loop through each cell in the dataframe
   for (i in 1:run_count) {
     for (j in 1:year_count) {
-      value <- intv_boundary[i, (j+1)]  # Get the original value, because the boundary data has a leading unit column, j is shifted over by 1
+      value <- intervention_sim[i, (j+1)]  # Get the original value, because the boundary data has a leading unit column, j is shifted over by 1
       
       # Generate random assignments for A, B, and C
       assignments <- sample(c("A", "W", "H"), value, replace = TRUE)
@@ -243,33 +259,33 @@ assign_projecttype <- function(intervention_sim){
       count_H <- sum(assignments == "H")
       
       # Store in respective matrices
-      ashp_count[i, j] <- count_A
-      weatherize_count[i, j] <- count_W
-      hpwh_count[i, j] <- count_H
+      ashp_bound[i, j] <- count_A
+      weatherize_bound[i, j] <- count_W
+      hpwh_bound[i, j] <- count_H
     }
   }
   
   # Convert matrices to dataframes, set column headers, and assign to the global environment
-  ashp_count <- as.data.frame(ashp_count)
-  colnames(ashp_count) <- output_headers
-  ashp_count <- ashp_count %>%
+  ashp_bound <- as.data.frame(ashp_bound)
+  colnames(ashp_bound) <- output_headers
+  ashp_bound <- ashp_bound %>%
     mutate(unit = intervention_sim[1,1]) %>%  # Add "unit" column with user 'units' input as value
     select(unit, everything())  # Move "unit" to the first position
-  assign("ashp_count", ashp_count, envir = .GlobalEnv)
+  assign("ashp_boundary_mgnl", ashp_bound, envir = .GlobalEnv)
   
-  weatherize_count <- as.data.frame(weatherize_count)
-  colnames(weatherize_count) <- output_headers
-  weatherize_count <- weatherize_count %>%
+  weatherize_bound <- as.data.frame(weatherize_bound)
+  colnames(weatherize_bound) <- output_headers
+  weatherize_bound <- weatherize_bound %>%
     mutate(unit = intervention_sim[1,1]) %>%  # Add "unit" column with user 'units' input as value
     select(unit, everything())  # Move "unit" to the first position
-  assign("weatherize_count", weatherize_count, envir = .GlobalEnv)
+  assign("weatherize_boundary_mgnl", weatherize_bound, envir = .GlobalEnv)
   
-  hpwh_count <- as.data.frame(hpwh_count)
-  colnames(hpwh_count) <- output_headers
-  hpwh_count <- hpwh_count %>%
+  hpwh_bound <- as.data.frame(hpwh_bound)
+  colnames(hpwh_bound) <- output_headers
+  hpwh_bound <- hpwh_bound %>%
     mutate(unit = intervention_sim[1,1]) %>%  # Add "unit" column with user 'units' input as value
     select(unit, everything())  # Move "unit" to the first position
-  assign("hpwh_count", hpwh_count, envir = .GlobalEnv)
+  assign("hpwh_boundary_mgnl", hpwh_bound, envir = .GlobalEnv)
   
 }
 
@@ -310,14 +326,14 @@ calculate_capex <- function(ref_name, intv_name, ref_bound, intv_bound, capex_mi
     }
   }
   
-  ref_out <- as.data.frame(ref_out)
+  ref_out <- as.data.frame(ref_out) * -1
   colnames(ref_out) <- output_headers
   ref_out <- ref_out %>%
     mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
     select(unit, everything())  # Move "unit" to the first position
   assign(ref_name, ref_out, envir = .GlobalEnv)
   
-  intv_out <- as.data.frame(intv_out)
+  intv_out <- as.data.frame(intv_out) * -1
   colnames(intv_out) <- output_headers
   intv_out <- intv_out %>%
     mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
@@ -347,14 +363,14 @@ calculate_opex <- function(ref_name, intv_name, ref_ad, intv_ad, opex, units){
     }
   }
   
-  ref_out <- as.data.frame(ref_out)
+  ref_out <- as.data.frame(ref_out) * -1
   colnames(ref_out) <- output_headers
   ref_out <- ref_out %>%
     mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
     select(unit, everything())  # Move "unit" to the first position
   assign(ref_name, ref_out, envir = .GlobalEnv)
   
-  intv_out <- as.data.frame(intv_out)
+  intv_out <- as.data.frame(intv_out) * -1
   colnames(intv_out) <- output_headers
   intv_out <- intv_out %>%
     mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
@@ -366,8 +382,8 @@ calculate_opex <- function(ref_name, intv_name, ref_ad, intv_ad, opex, units){
 
 ghg_conversion1 <- function(ref_name,
                             intv_name,
-                            ref_AD,
-                            intv_AD,
+                            ref_ad,
+                            intv_ad,
                             fltr.ef_activeyear,
                             fltr.service_type, 
                             fltr.emission_category, 
@@ -376,7 +392,7 @@ ghg_conversion1 <- function(ref_name,
                             fltr.service_subcategory2 = "", 
                             fltr.country = "global", 
                             fltr.subregion = "") {
-  fltr.unit <- ref_AD[1,1]
+  fltr.unit <- ref_ad[1,1]
   EFL <- as.data.table(EFL)
   EF_row <- EFL[ef_activeyear == fltr.ef_activeyear &
                 service_type == fltr.service_type &
@@ -389,69 +405,56 @@ ghg_conversion1 <- function(ref_name,
                 unit == fltr.unit]
   EF_value <- EF_row$kgco2e_perunit
   EF_df <- data.frame(matrix(EF_value, nrow = run_count, ncol = year_count))
-  colnames(EF_df) <- output_headers
-  ghg1 <- EF_df * ref_AD[, -1]
-  ghg1$unit <- "kgco2e"
-  ghg1 <- ghg1[, c("unit", setdiff(names(ghg1), "unit"))]
-  assign(ref_name, ghg1, envir = .GlobalEnv)
-  ghg2 <- EF_df * intv_AD[, -1]
-  ghg2$unit <- "kgco2e"
-  ghg2 <- ghg2[, c("unit", setdiff(names(ghg2), "unit"))]
-  assign(intv_name, ghg2, envir = .GlobalEnv)
+  
+  ref_ghg <- EF_df * ref_ad[, -1]
+  colnames(ref_ghg) <- output_headers
+  ref_ghg <- ref_ghg %>%
+    mutate(unit = "kgco2e") %>% 
+    select(unit, everything())  
+  assign(ref_name, ref_ghg, envir = .GlobalEnv)
+  
+  intv_ghg <- EF_df * intv_ad[, -1]
+  colnames(intv_ghg) <- output_headers
+  intv_ghg <- intv_ghg %>%
+    mutate(unit = "kgco2e") %>% 
+    select(unit, everything())  
+  assign(intv_name, intv_ghg, envir = .GlobalEnv)
 }
 
-### GHG Conversion function with EFs from MCS 
+### GHG Conversion function with EF simulation from MCS 
 
-ghg_conversion2 <- function(ref_name, intv_name, EFsim_out, ref_AD, intv_AD){
-  ghg1 <- EFsim_out * ref_AD[, -1]
-  ghg1$unit <- "kgco2e"
-  ghg1 <- ghg1[, c("unit", setdiff(names(ghg1), "unit"))]
-  assign(ref_name, ghg1, envir = .GlobalEnv)
-  ghg2 <- EFsim_out * intv_AD[, -1]
-  ghg2$unit <- "kgco2e"
-  ghg2 <- ghg2[, c("unit", setdiff(names(ghg2), "unit"))]
-  assign(intv_name, ghg2, envir = .GlobalEnv)
+ghg_conversion2 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
+  ref_ghg <- ef_sim[, -1] * ref_ad[, -1]
+  colnames(ref_ghg) <- output_headers
+  ref_ghg <- ref_ghg %>%
+    mutate(unit = "kgco2e") %>% 
+    select(unit, everything())  
+  assign(ref_name, ref_ghg, envir = .GlobalEnv)
+  
+  intv_ghg <- ef_sim[, -1] * intv_ad[, -1]
+  colnames(intv_ghg) <- output_headers
+  intv_ghg <- intv_ghg %>%
+    mutate(unit = "kgco2e") %>% 
+    select(unit, everything())  
+  assign(intv_name, intv_ghg, envir = .GlobalEnv)
 }
 
-### GHG Conversion function for spend-based scope 3 supply chain
+### Spend-based GHG Conversion function with EF simulation from MCS (because costs are negative, this takes the inverse of the ad input)
 
-ghg_conversion3 <- function(ref_name, intv_name, ref_capex, intv_capex, sef_min, sef_max, units){
-  #initiate empty dataframe 
-  ref_out <- matrix(0, nrow = run_count, ncol = year_count)
-  intv_out <- matrix(0, nrow = run_count, ncol = year_count)
+ghg_conversion3 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
+  ref_ghg <- ef_sim[, -1] * ref_ad[, -1] * -1
+  colnames(ref_ghg) <- output_headers
+  ref_ghg <- ref_ghg %>%
+    mutate(unit = "kgco2e") %>% 
+    select(unit, everything())  
+  assign(ref_name, ref_ghg, envir = .GlobalEnv)
   
-  for (i in 1:run_count) {
-    for (j in 1:year_count) {
-      nr <- ref_bound[i, (j+1)] # Because the activity data has a leading unit column, j is shifted over by 1
-      ni <- intv_bound[i, (j+1)]
-      
-      # Calculate total capex costs for the reference and intervention scenarios
-      capex_refsim <- runif(nr, min = capex_min, max = capex_max) # Simulate capex for each home
-      capex_intvsim <- runif(ni, min = capex_min, max = capex_max) # Simulate capex for each home
-      
-      # Sum total capex
-      ref_sum <- sum(capex_refsim) # sum of reference capex for all homes
-      intv_sum <- sum(capex_intvsim) # sum of intervention capex for all homes
-      
-      # Store in respective matrices
-      ref_out[i, j] <- ref_sum
-      intv_out[i, j] <- intv_sum
-    }
-  }
-  
-  ref_out <- as.data.frame(ref_out)
-  colnames(ref_out) <- output_headers
-  ref_out <- ref_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(ref_name, ref_out, envir = .GlobalEnv)
-  
-  intv_out <- as.data.frame(intv_out)
-  colnames(intv_out) <- output_headers
-  intv_out <- intv_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(intv_name, intv_out, envir = .GlobalEnv)
+  intv_ghg <- ef_sim[, -1] * intv_ad[, -1] * -1
+  colnames(intv_ghg) <- output_headers
+  intv_ghg <- intv_ghg %>%
+    mutate(unit = "kgco2e") %>% 
+    select(unit, everything())  
+  assign(intv_name, intv_ghg, envir = .GlobalEnv)
 }
 
 ### Calculate CBA indicators (NPV, LCCA) at different discount rates
@@ -482,7 +485,7 @@ cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = year_count){
     
     annual_npv_private <- cashflow_private/discount_df # the total annual cash flow is converted into NPV
     annual_npv_econ <- cashflow_econ/discount_df
-    annual_npv_social <- annual_npv_econ + total_coben_value # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
+    annual_npv_social <- annual_npv_econ + coben_value_trim # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
     
     npv_private_cumsum <- as.data.frame(t(apply(annual_npv_private, 1, cumsum))) # net present value is summed cumulatively for each year
     npv_econ_cumsum <- as.data.frame(t(apply(annual_npv_econ, 1, cumsum)))

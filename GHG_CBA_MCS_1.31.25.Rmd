@@ -44,24 +44,30 @@ write_xlsx(EFL, path = "EFLco2e.xlsx")
 
 Emission Factor Simulations
 ```{r}
-scenario_MCS("electricity_ef", units = "kgco2e/kWh")
+# Electricity emission factor
+scenario_MCS("ef_sim_electricity", sheet_name = "electricity_ef", units = "kgco2e/kWh")
+
+# Supply Chain emission factor
+continuous_uniform2("ef_sim_appliances_upstream", minvalue = 0.079, maxvalue = 0.161, units = "kgco2e/USD")
+continuous_uniform2("ef_sim_weatherize_upstream", minvalue = 0.082, maxvalue = 0.208, units = "kgco2e/USD")
+
 ```
 
 Boundary Simulations
 ```{r}
 # Reference boundary represents zero energy efficiency upgrades in each year
-static_value("ref_boundary", 0, units = "project count")
+static_value("ref_boundary_mgnl", 0, units = "project count")
 
 # Intervention boundary is modeled as a random value between 120 and 160.
-discrete_uniform3("intv_boundary", minvalue = 120, maxvalue = 160, units = "project count")
+discrete_uniform2("intv_boundary_mgnl", minvalue = 120, maxvalue = 160, units = "project count")
 
 # Project types are randomly assigned for the intervention boundary, with three new dataframes for each project type.
-assign_projecttype(intv_boundary)
+assign_projecttype(intv_boundary_mgnl)
 
 # Calculate cumulative project counts for each project type
-cumul_sum("asph_cumulcount", ashp_count)
-cumul_sum("weatherize_cumulcount", weatherize_count)
-cumul_sum("hpwh_cumulcount", hpwh_count)
+cumul_sum("ashp_boundary", ashp_boundary_mgnl)
+cumul_sum("weatherize_boundary", weatherize_boundary_mgnl)
+cumul_sum("hpwh_boundary", hpwh_boundary_mgnl)
 
 ```
 
@@ -71,67 +77,42 @@ Air source heat pumps (ASHP): Activity data, cost, and GHG simulations
 # The reference factor is simulated for each home based on a normal distribution 
 # The intervention factor is simulated for each home based on a uniform distribution
 # The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("ashp_ref1", "ashp_intv1", ashp_count, ref_mean = 4146, ref_sd = 233, intv_min = 0.31, intv_max = 0.47, units = "kWh")
+calculate_AD1("ashp_ref_ann_data1", "ashp_intv_ann_data1", ashp_boundary_mgnl, ref_mean = 4146, ref_sd = 233, intv_min = 0.31, intv_max = 0.47, units = "kWh")
+
+# Calculate cumulative activity data
+cumul_sum("ashp_ref_data1", ashp_ref_ann_data1)
+cumul_sum("ashp_intv_data1", ashp_intv_ann_data1)
 
 # ASHP factor 2 simulates the annual natural gas consumption for space heating and cooling in a residential home
 # The reference factor is simulated for each home based on a normal distribution 
 # The intervention factor is simulated for each home based on a uniform distribution
 # The function outputs total reference and intervention scenario energy consumption for all homes in boundary
-calculate_AD1("ashp_ref2", "ashp_intv2", ashp_count, ref_mean = 603, ref_sd = 11.3, intv_min = 0.31, intv_max = 0.47, units = "therms")
+calculate_AD1("ashp_ref_ann_data2", "ashp_intv_ann_data2", ashp_boundary_mgnl, ref_mean = 603, ref_sd = 11.3, intv_min = 0.31, intv_max = 0.47, units = "therms")
+
+# Calculate cumulative activity data
+cumul_sum("ashp_ref_data2", ashp_ref_ann_data2)
+cumul_sum("ashp_intv_data2", ashp_intv_ann_data2)
 
 # ASHP Capex is calculated by simulating the installation costs for each home
-calculate_capex("ashp_refcapex", "ashp_intvcapex", ref_boundary, ashp_count, capex_min = 2100, capex_max = 6000, units = "USD")
+calculate_capex("ashp_ref_capex1", "ashp_intv_capex1", ref_boundary_mgnl, ashp_boundary_mgnl, capex_min = 2100, capex_max = 6000, units = "USD")
 
-# ASHP Opex is calculated for electricity and natural gas seperatly, based on current energy prices
-calculate_opex("ashp_refopex1", "ashp_intvopex1", ashp_ref1, ashp_intv1, opex = 0.1542, units = "USD")
-calculate_opex("ashp_refopex2", "ashp_intvopex2", ashp_ref2, ashp_intv2, opex = 0.3434, units = "therms")
+# Sum total Capex
+ashp_ref_sumcapex <- ashp_ref_capex1[,-1]
+ashp_intv_sumcapex <- ashp_intv_capex1[,-1]
 
+# ASHP Opex is calculated for electricity and natural gas separately, based on current energy prices
+calculate_opex("ashp_ref_opex1", "ashp_intv_opex1", ashp_ref_data1, ashp_intv_data1, opex = 0.1542, units = "USD")
+calculate_opex("ashp_ref_opex2", "ashp_intv_opex2", ashp_ref_data2, ashp_intv_data2, opex = 0.3434, units = "therms")
 
+# Sum total opex
+ashp_ref_sumopex <- ashp_ref_opex1[,-1] + ashp_ref_opex2[,-1]
+ashp_intv_sumopex <- ashp_intv_opex1[,-1] + ashp_intv_opex2[,-1]
 
-```
-
-Parameter 1 Cost Simulations
-```{r}
-# Reference capex1 is $0 per home
-static.value("ref_capex1_costfactor", 0)
-
-# Reference opex1 is $0.16 per kWh electricity
-static.value("ref_opex1_costfactor", -.16)
-
-# Reference opex2 is $2.40 per therm natural gas
-static.value("ref_opex2_costfactor", -2.4)
-
-# Intervention capex1 is the program cost per home, modeled as a normal distribution.
-# mean = $5117 sd = $52
-# The selected value for each simulation is applied consistently over the scenario lifetime.
-normal.PDF("intv_capex1_costfactor", -5117, 52)
-
-# calculate reference costs
-ref_capex1 <- ref_boundary*ref_capex1_costfactor
-ref_opex1 <- ref_AD1[, -1]*ref_opex1_costfactor
-ref_opex2 <- ref_AD2[, -1]*ref_opex2_costfactor
-
-# calculate intervention costs
-intv_capex1 <- intv_boundary*intv_capex1_costfactor
-intv_opex1 <- intv_AD1[, -1]*ref_opex1_costfactor # the cost for electricity is the same in the ref & intv scenarios
-intv_opex2 <- intv_AD2[, -1]*ref_opex2_costfactor # the cost for natural gas is the same in the ref & intv scenarios
-
-# Consolidate total costs
-ref_totalcost <- (ref_capex1 + ref_opex1 + ref_opex2)
-intv_totalcost <- (intv_capex1 + intv_opex1 + intv_opex2)
-
-```
-
-Parameter 1 GHG Calculations
-```{r}
-# calculate GHG emissions for AD1 (electricity)
-ghg_conversion2("ref_ghg1", "intv_ghg1", electricity_ef, ref_AD1, intv_AD1)
-
-# calculate GHG emissions for AD2 (natural gas)
-ghg_conversion1("ref_ghg2",
-                "intv_ghg2",
-                ref_AD2,
-                intv_AD2,
+# Calculate scope 1 natural gas emissions 
+ghg_conversion1("ashp_ref_ghg_natgas",
+                "ashp_intv_ghg_natgas",
+                ashp_ref_data2,
+                ashp_intv_data2,
                 fltr.ef_activeyear = 2024, 
                 fltr.service_type = "natural gas", 
                 fltr.emission_category = "stationary", 
@@ -141,83 +122,321 @@ ghg_conversion1("ref_ghg2",
                 fltr.country = "global", 
                 fltr.subregion = "")
 
-# calculate total reference GHG emissions
-ref_ghgtotal <- (ref_ghg1[, -1] + ref_ghg2[, -1])/1000
-ref_ghgtotal$unit <- "mtco2e"
-ref_ghgtotal <- ref_ghgtotal[, c("unit", setdiff(names(ref_ghgtotal), "unit"))]
+# Calculate scope 2 electricity ghg emissions based on a simulation of grid emissions intensity
+ghg_conversion2("ashp_ref_ghg_elec", "ashp_intv_ghg_elec", ef_sim_electricity, ashp_ref_data1, ashp_intv_data1)
 
-# calculate total intervention GHG emissions
-intv_ghgtotal <- (intv_ghg1[, -1] + intv_ghg2[, -1])/1000
-intv_ghgtotal$unit <- "mtco2e"
-intv_ghgtotal <- intv_ghgtotal[, c("unit", setdiff(names(intv_ghgtotal), "unit"))]
+# Calculate scope 3 supply chain ghg emissions based on a simulation of the upstream spend-based emission factor
+ghg_conversion3("ashp_ref_ghg_upstream", "ashp_intv_ghg_upstream", ef_sim_appliances_upstream, ashp_ref_capex1, ashp_intv_capex1)
 
-# Calculate GHG mitigation
-ghg_mitigation <- ref_ghgtotal[, -1] - intv_ghgtotal[, -1]
-ghg_mitigation$unit <- "mtco2e"
-ghg_mitigation <- ghg_mitigation[, c("unit", setdiff(names(ghg_mitigation), "unit"))]
+# Calculate total ashp GHG emissions
+ashp_ref_ghg_total <- ashp_ref_ghg_natgas[, -1] + ashp_ref_ghg_elec[, -1] + ashp_ref_ghg_upstream[, -1]
+ashp_intv_ghg_total <- ashp_intv_ghg_natgas[, -1] + ashp_intv_ghg_elec[, -1] + ashp_intv_ghg_upstream[, -1]
+
 ```
 
-
-Parameter 1 Co-benefits 
+Weatherization: Activity data, cost, and GHG simulations
 ```{r}
+# Weatherization factor 1 simulates the annual electricity consumption for space heating and cooling in a residential home
+# The reference factor is simulated for each home based on a normal distribution 
+# The intervention factor is simulated for each home based on a uniform distribution
+# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
+calculate_AD1("weatherize_ref_ann_data1", "weatherize_intv_ann_data1", weatherize_boundary_mgnl, ref_mean = 4146, ref_sd = 233, intv_min = 0.10, intv_max = 0.20, units = "kWh")
+
+# Calculate cumulative activity data
+cumul_sum("weatherize_ref_data1", weatherize_ref_ann_data1)
+cumul_sum("weatherize_intv_data1", weatherize_intv_ann_data1)
+
+# Weatherization factor 2 simulates the annual natural gas consumption for space heating and cooling in a residential home
+# The reference factor is simulated for each home based on a normal distribution 
+# The intervention factor is simulated for each home based on a uniform distribution
+# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
+calculate_AD1("weatherize_ref_ann_data2", "weatherize_intv_ann_data2", weatherize_boundary_mgnl, ref_mean = 603, ref_sd = 11.3, intv_min = 0.10, intv_max = 0.20, units = "therms")
+
+# Calculate cumulative activity data
+cumul_sum("weatherize_ref_data2", weatherize_ref_ann_data2)
+cumul_sum("weatherize_intv_data2", weatherize_intv_ann_data2)
+
+# Weatherization Capex is calculated by simulating the installation costs for each home
+calculate_capex("weatherize_ref_capex1", "weatherize_intv_capex1", ref_boundary_mgnl, weatherize_boundary_mgnl, capex_min = 1879, capex_max = 2962, units = "USD")
+
+# Sum total Capex
+weatherize_ref_sumcapex <- weatherize_ref_capex1[,-1]
+weatherize_intv_sumcapex <- weatherize_intv_capex1[,-1]
+
+# Weatherization Opex is calculated for electricity and natural gas separately, based on current energy prices
+calculate_opex("weatherize_ref_opex1", "weatherize_intv_opex1", weatherize_ref_data1, weatherize_intv_data1, opex = 0.1542, units = "USD")
+calculate_opex("weatherize_ref_opex2", "weatherize_intv_opex2", weatherize_ref_data2, weatherize_intv_data2, opex = 0.3434, units = "therms")
+
+# Sum total Opex
+weatherize_ref_sumopex <- weatherize_ref_opex1[,-1] + weatherize_ref_opex2[,-1]
+weatherize_intv_sumopex <- weatherize_intv_opex1[,-1] + weatherize_intv_opex2[,-1]
+
+# Calculate scope 1 natural gas emissions 
+ghg_conversion1("weatherize_ref_ghg_natgas",
+                "weatherize_intv_ghg_natgas",
+                weatherize_ref_data2,
+                weatherize_intv_data2,
+                fltr.ef_activeyear = 2024, 
+                fltr.service_type = "natural gas", 
+                fltr.emission_category = "stationary", 
+                fltr.emission_scope = "scope 1",
+                fltr.service_subcategory1 = "", 
+                fltr.service_subcategory2 = "", 
+                fltr.country = "global", 
+                fltr.subregion = "")
+
+# Calculate scope 2 electricity ghg emissions based on a simulation of grid emissions intensity
+ghg_conversion2("weatherize_ref_ghg_elec", "weatherize_intv_ghg_elec", ef_sim_electricity, weatherize_ref_data1, weatherize_intv_data1)
+
+# Calculate scope 3 supply chain ghg emissions based on a simulation of the upstream spend-based emission factor
+ghg_conversion3("weatherize_ref_ghg_upstream", "weatherize_intv_ghg_upstream", ef_sim_weatherize_upstream, weatherize_ref_capex1, weatherize_intv_capex1)
+
+# Calculate total weatherize GHG emissions
+weatherize_ref_ghg_total <- weatherize_ref_ghg_natgas[, -1] + weatherize_ref_ghg_elec[, -1] + weatherize_ref_ghg_upstream[, -1]
+weatherize_intv_ghg_total <- weatherize_intv_ghg_natgas[, -1] + weatherize_intv_ghg_elec[, -1] + weatherize_intv_ghg_upstream[, -1]
+
+```
+
+Heat Pump Water Heater (HPWH): Activity data, cost, and GHG simulations
+```{r}
+# HPWH factor 1 simulates the annual electricity consumption for water heating in a residential home
+# The reference factor is simulated for each home based on a normal distribution 
+# The intervention factor is simulated for each home based on a uniform distribution
+# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
+calculate_AD1("hpwh_ref_ann_data1", "hpwh_intv_ann_data1", hpwh_boundary_mgnl, ref_mean = 2969, ref_sd = 108.1, intv_min = 0.30, intv_max = 0.70, units = "kWh")
+
+# Calculate cumulative activity data
+cumul_sum("hpwh_ref_data1", hpwh_ref_ann_data1)
+cumul_sum("hpwh_intv_data1", hpwh_intv_ann_data1)
+
+# HPWH factor 2 simulates the annual natural gas consumption for water heating in a residential home
+# The reference factor is simulated for each home based on a normal distribution 
+# The intervention factor is simulated for each home based on a uniform distribution
+# The function outputs total reference and intervention scenario energy consumption for all homes in boundary
+calculate_AD1("hpwh_ref_ann_data2", "hpwh_intv_ann_data2", hpwh_boundary_mgnl, ref_mean = 237, ref_sd = 4, intv_min = 0.30, intv_max = 0.70, units = "therms")
+
+# Calculate cumulative activity data
+cumul_sum("hpwh_ref_data2", hpwh_ref_ann_data2)
+cumul_sum("hpwh_intv_data2", hpwh_intv_ann_data2)
+
+# HPWH Capex is calculated by simulating the installation costs for each home
+calculate_capex("hpwh_ref_capex1", "hpwh_intv_capex1", ref_boundary_mgnl, hpwh_boundary_mgnl, capex_min = 1300, capex_max = 2900, units = "USD")
+
+# Sum total Capex
+hpwh_ref_sumcapex <- hpwh_ref_capex1[,-1]
+hpwh_intv_sumcapex <- hpwh_intv_capex1[,-1]
+
+# HPWH Opex is calculated for electricity and natural gas separately, based on current energy prices
+calculate_opex("hpwh_ref_opex1", "hpwh_intv_opex1", hpwh_ref_data1, hpwh_intv_data1, opex = 0.1542, units = "USD")
+calculate_opex("hpwh_ref_opex2", "hpwh_intv_opex2", hpwh_ref_data2, hpwh_intv_data2, opex = 0.3434, units = "therms")
+
+# Sum total Opex
+hpwh_ref_sumopex <- hpwh_ref_opex1[,-1] + hpwh_ref_opex2[,-1]
+hpwh_intv_sumopex <- hpwh_intv_opex1[,-1] + hpwh_intv_opex2[,-1]
+
+# Calculate scope 1 natural gas emissions 
+ghg_conversion1("hpwh_ref_ghg_natgas",
+                "hpwh_intv_ghg_natgas",
+                hpwh_ref_data2,
+                hpwh_intv_data2,
+                fltr.ef_activeyear = 2024, 
+                fltr.service_type = "natural gas", 
+                fltr.emission_category = "stationary", 
+                fltr.emission_scope = "scope 1",
+                fltr.service_subcategory1 = "", 
+                fltr.service_subcategory2 = "", 
+                fltr.country = "global", 
+                fltr.subregion = "")
+
+# Calculate scope 2 electricity ghg emissions based on a simulation of grid emissions intensity
+ghg_conversion2("hpwh_ref_ghg_elec", "hpwh_intv_ghg_elec", ef_sim_electricity, hpwh_ref_data1, hpwh_intv_data1)
+
+# Calculate scope 3 supply chain ghg emissions based on a simulation of the upstream spend-based emission factor
+ghg_conversion3("hpwh_ref_ghg_upstream", "hpwh_intv_ghg_upstream", ef_sim_appliances_upstream, hpwh_ref_capex1, hpwh_intv_capex1)
+
+# Calculate total HPWH GHG emissions
+hpwh_ref_ghg_total <- hpwh_ref_ghg_natgas[, -1] + hpwh_ref_ghg_elec[, -1] + hpwh_ref_ghg_upstream[, -1]
+hpwh_intv_ghg_total <- hpwh_intv_ghg_natgas[, -1] + hpwh_intv_ghg_elec[, -1] + hpwh_intv_ghg_upstream[, -1]
+
+```
+
+Calculate GHG Mitigation
+```{r}
+# calculate total reference GHG emissions
+ref_ghg_total <- (ashp_ref_ghg_total + weatherize_ref_ghg_total + hpwh_ref_ghg_total)/1000
+ref_ghg_total <- ref_ghg_total %>%
+    mutate(unit = "mtco2e") %>%  
+    select(unit, everything())  
+
+# calculate total intervention GHG emissions
+intv_ghg_total <- (ashp_intv_ghg_total + weatherize_intv_ghg_total + hpwh_intv_ghg_total)/1000
+intv_ghg_total <- intv_ghg_total %>%
+    mutate(unit = "mtco2e") %>%  #
+    select(unit, everything())  
+
+# Calculate GHG mitigation
+ghg_mitigation <- ref_ghg_total[, -1] - intv_ghg_total[, -1]
+ghg_mitigation <- ghg_mitigation %>%
+    mutate(unit = "mtco2e") %>%  
+    select(unit, everything())  
+
+```
+
+Calculate total costs and co-benefits
+```{r}
+# Calculate total reference scenario costs
+ref_opex_total <- ashp_ref_sumopex + weatherize_ref_sumopex + hpwh_ref_sumopex
+ref_capex_total <- ashp_ref_sumcapex + weatherize_ref_sumcapex + hpwh_ref_sumcapex
+ref_costs_econ <- ref_opex_total + ref_capex_total
+
+# Calculate total intervention scenario costs
+intv_opex_total <- ashp_intv_sumopex + weatherize_intv_sumopex + hpwh_intv_sumopex
+intv_capex_total <- ashp_intv_sumcapex + weatherize_intv_sumcapex + hpwh_intv_sumcapex
+intv_costs_econ <- intv_opex_total + intv_capex_total
+
 # Social cost of carbon (SCC) is modeled as a normal distribution. It's modeled as an avoided cost, so a positive value is used. 
-# mean = $44 sd = $37
+# mean = $185 sd = $85.7
 # The selected value for each simulation is applied consistently over the scenario lifetime.
-normal.PDF("coben1", 44, 37)
+normal_PDF("coben1_sim", 185, 85.7, units = "USD/mtco2e")
 
 # The function above leads to negative values for the social cost of carbon. In practice, this does not make sense. So negative values are converted to 0 below
-coben1[coben1 < 0] <- 0
+coben1_sim[coben1_sim < 0] <- 0
 
 # Calculate social value from Parameter 1 co-benefits 
 
-coben1_value <- ghg_mitigation[, -1] * coben1
-coben1_value$unit <- "social value of avoided carbon (USD)"
-coben1_value <- coben1_value[, c("unit", setdiff(names(coben1_value), "unit"))]
-total_coben_value <- coben1_value[, -1]
+coben1_value <- ghg_mitigation[, -1] * coben1_sim[, -1]
+coben1_value <- coben1_value %>%
+    mutate(unit = "social value of avoided carbon (USD)") %>%  
+    select(unit, everything()) 
+coben_value_trim <- coben1_value[, -1]
+
+# Calculate cashflow
+cashflow_investment <- intv_capex_total - ref_capex_total # Assuming capex costs = investment costs
+cashflow_opex <- intv_opex_total - ref_opex_total
+cashflow_econ <- intv_costs_econ - ref_costs_econ
+cashflow_social <- cashflow_econ + coben_value_trim
+cashflow_private <- cashflow_econ # This is a space holder for now. This could use the average rebate coverage to calculate cost to city of Flag
 
 ```
 
-Parameter 1 cashflow outputs
+Excel Exports
 ```{r}
-cashflow_private <- intv_capex1 - ref_capex1 # assuming capital expenses are the only private cost/benefit
-cashflow_econ <- intv_totalcost - ref_totalcost
-cashflow_social <- cashflow_econ + total_coben_value
-```
+ashp_outputlist <- (list("ashp_boundary_mgnl" = ashp_boundary_mgnl,
+                         "ashp_boundary" = ashp_boundary,
+                         "ashp_ref_ann_data1" = ashp_ref_ann_data1,
+                         "ashp_ref_ann_data2" = ashp_ref_ann_data2,
+                         "ashp_ref_data1" = ashp_ref_data1,
+                         "ashp_ref_data2" = ashp_ref_data2,
+                         "ashp_ref_ghg_elec" = ashp_ref_ghg_elec,
+                         "ashp_ref_ghg_natgas" = ashp_ref_ghg_natgas,
+                         "ashp_ref_ghg_total" = ashp_ref_ghg_total,
+                         "ashp_ref_ghg_upstream" = ashp_ref_ghg_upstream,
+                         "ashp_ref_capex1" = ashp_ref_capex1,
+                         "ashp_ref_opex1" = ashp_ref_opex1,
+                         "ashp_ref_opex2" = ashp_ref_opex2,
+                         "ashp_ref_sumcapex" = ashp_ref_sumcapex,
+                         "ashp_ref_sumopex" = ashp_ref_sumopex,
+                         "ashp_intv_ann_data1" = ashp_intv_ann_data1,
+                         "ashp_intv_ann_data2" = ashp_intv_ann_data2,
+                         "ashp_intv_data1" = ashp_intv_data1,
+                         "ashp_intv_data2" = ashp_intv_data2,
+                         "ashp_intv_ghg_elec" = ashp_intv_ghg_elec,
+                         "ashp_intv_ghg_natgas" = ashp_intv_ghg_natgas,
+                         "ashp_intv_ghg_total" = ashp_intv_ghg_total,
+                         "ashp_intv_ghg_upstream" = ashp_intv_ghg_upstream,
+                         "ashp_intv_capex1" = ashp_intv_capex1,
+                         "ashp_intv_opex1" = ashp_intv_opex1,
+                         "ashp_intv_opex2" = ashp_intv_opex2,
+                         "ashp_intv_sumcapex" = ashp_intv_sumcapex,
+                         "ashp_intv_sumopex" = ashp_intv_sumopex)
+)
 
-Excel Export
-```{r}
-p1_outputlist <- (list("ref_boundary" = ref_boundary,
-                    "intv_boundary" = intv_boundary, 
-                    "ref_factor1" = ref_factor1,
-                    "ref_factor2" = ref_factor2,
-                    "intv_factor" = intv_factor1,
-                    "ref_capex1" = ref_capex1,
-                    "intv_capex1" = intv_capex1,
-                    "ref_opex1" = ref_opex1,
-                    "intv_opex1" = intv_opex1,
-                    "ref_opex2" = ref_opex2,
-                    "intv_opex2" = intv_opex2,
-                    "ref_data1" = ref_AD1,
-                    "intv_data1" = intv_AD1,
-                    "ref_data2" = ref_AD2,
-                    "intv_data2" = intv_AD2,
-                    "emission_factors_1" = electricity_ef,
-                    "ref_ghg1" = ref_ghg1,
-                    "intv_ghg1" = intv_ghg1,
-                    "ref_ghg2" = ref_ghg2,
-                    "intv_ghg2" = intv_ghg2,
-                    "ref_ghgtotal" = ref_ghgtotal,
-                    "intv_ghgtotal" = intv_ghgtotal,
-                    "net_ghg" = ghg_mitigation,
-                    "scc" = coben1,
-                    "social_value" = coben1_value,
-                    "cashflow_private" = cashflow_private,
-                    "cashflow_econ" = cashflow_econ,
-                    "cashflow_social" = cashflow_social))
+weatherize_outputlist <- (list("weatherize_boundary_mgnl" = weatherize_boundary_mgnl,
+                         "weatherize_boundary" = weatherize_boundary,
+                         "weatherize_ref_ann_data1" = weatherize_ref_ann_data1,
+                         "weatherize_ref_ann_data2" = weatherize_ref_ann_data2,
+                         "weatherize_ref_data1" = weatherize_ref_data1,
+                         "weatherize_ref_data2" = weatherize_ref_data2,
+                         "weatherize_ref_ghg_elec" = weatherize_ref_ghg_elec,
+                         "weatherize_ref_ghg_natgas" = weatherize_ref_ghg_natgas,
+                         "weatherize_ref_ghg_total" = weatherize_ref_ghg_total,
+                         "weatherize_ref_ghg_upstream" = weatherize_ref_ghg_upstream,
+                         "weatherize_ref_capex1" = weatherize_ref_capex1,
+                         "weatherize_ref_opex1" = weatherize_ref_opex1,
+                         "weatherize_ref_opex2" = weatherize_ref_opex2,
+                         "weatherize_ref_sumcapex" = weatherize_ref_sumcapex,
+                         "weatherize_ref_sumopex" = weatherize_ref_sumopex,
+                         "weatherize_intv_ann_data1" = weatherize_intv_ann_data1,
+                         "weatherize_intv_ann_data2" = weatherize_intv_ann_data2,
+                         "weatherize_intv_data1" = weatherize_intv_data1,
+                         "weatherize_intv_data2" = weatherize_intv_data2,
+                         "weatherize_intv_ghg_elec" = weatherize_intv_ghg_elec,
+                         "weatherize_intv_ghg_natgas" = weatherize_intv_ghg_natgas,
+                         "weatherize_intv_ghg_total" = weatherize_intv_ghg_total,
+                         "weatherize_intv_ghg_upstream" = weatherize_intv_ghg_upstream,
+                         "weatherize_intv_capex1" = weatherize_intv_capex1,
+                         "weatherize_intv_opex1" = weatherize_intv_opex1,
+                         "weatherize_intv_opex2" = weatherize_intv_opex2,
+                         "weatherize_intv_sumcapex" = weatherize_intv_sumcapex,
+                         "weatherize_intv_sumopex" = weatherize_intv_sumopex)
+)
+
+hpwh_outputlist <- (list("hpwh_boundary_mgnl" = hpwh_boundary_mgnl,
+                         "hpwh_boundary" = hpwh_boundary,
+                         "hpwh_ref_ann_data1" = hpwh_ref_ann_data1,
+                         "hpwh_ref_ann_data2" = hpwh_ref_ann_data2,
+                         "hpwh_ref_data1" = hpwh_ref_data1,
+                         "hpwh_ref_data2" = hpwh_ref_data2,
+                         "hpwh_ref_ghg_elec" = hpwh_ref_ghg_elec,
+                         "hpwh_ref_ghg_natgas" = hpwh_ref_ghg_natgas,
+                         "hpwh_ref_ghg_total" = hpwh_ref_ghg_total,
+                         "hpwh_ref_ghg_upstream" = hpwh_ref_ghg_upstream,
+                         "hpwh_ref_capex1" = hpwh_ref_capex1,
+                         "hpwh_ref_opex1" = hpwh_ref_opex1,
+                         "hpwh_ref_opex2" = hpwh_ref_opex2,
+                         "hpwh_ref_sumcapex" = hpwh_ref_sumcapex,
+                         "hpwh_ref_sumopex" = hpwh_ref_sumopex,
+                         "hpwh_intv_ann_data1" = hpwh_intv_ann_data1,
+                         "hpwh_intv_ann_data2" = hpwh_intv_ann_data2,
+                         "hpwh_intv_data1" = hpwh_intv_data1,
+                         "hpwh_intv_data2" = hpwh_intv_data2,
+                         "hpwh_intv_ghg_elec" = hpwh_intv_ghg_elec,
+                         "hpwh_intv_ghg_natgas" = hpwh_intv_ghg_natgas,
+                         "hpwh_intv_ghg_total" = hpwh_intv_ghg_total,
+                         "hpwh_intv_ghg_upstream" = hpwh_intv_ghg_upstream,
+                         "hpwh_intv_capex1" = hpwh_intv_capex1,
+                         "hpwh_intv_opex1" = hpwh_intv_opex1,
+                         "hpwh_intv_opex2" = hpwh_intv_opex2,
+                         "hpwh_intv_sumcapex" = hpwh_intv_sumcapex,
+                         "hpwh_intv_sumopex" = hpwh_intv_sumopex)
+)
+
+summary_outputlist <- (list("cashflow_investment" = cashflow_investment,
+                         "cashflow_opex" = cashflow_opex,
+                         "cashflow_private" = cashflow_private,
+                         "cashflow_econ" = cashflow_econ,
+                         "cashflow_social" = cashflow_social,
+                         "coben1_sim" = coben1_sim,
+                         "coben1_value" = coben1_value,
+                         "ghg_mitigation" = ghg_mitigation,
+                         "intv_boundary_mgnl" = intv_boundary_mgnl,
+                         "intv_capex_total" = intv_capex_total,
+                         "intv_costs_econ" = intv_costs_econ,
+                         "intv_ghg_total" = intv_ghg_total,
+                         "intv_opex_total" = intv_opex_total,
+                         "ref_boundary_mgnl" = ref_boundary_mgnl,
+                         "ref_capex_total" = ref_capex_total,
+                         "ref_costs_econ" = ref_costs_econ,
+                         "ref_ghg_total" = ref_ghg_total,
+                         "ref_opex_total" = ref_opex_total)
+)
 
 #write excel and save p1 outputs (NOTE: Change names for each parameter)
 
-write_xlsx(p1_outputlist, path = "p1_output.xlsx")
+write_xlsx(ashp_outputlist, path = "ashp_output.xlsx")
+write_xlsx(weatherize_outputlist, path = "weatherize_output.xlsx")
+write_xlsx(hpwh_outputlist, path = "hpwh_output.xlsx")
+write_xlsx(summary_outputlist, path = "summary_output.xlsx")
 
 ```
 
@@ -236,7 +455,8 @@ mcs_stats(lower_bound = .25, upper_bound = .75)
 NPV Matrix
 ```{r}
 # Econ NPV matrix
-npv_econ_medians <- data.frame(matrix(NA, nrow = 26, ncol = 71)) 
+npv_econ_medians <- data.frame(matrix(NA, nrow = 26, ncol = 71))
+years <- output_headers
 drcolnames <- paste0("dr",((0:70)/10))
 colnames(npv_econ_medians) <- drcolnames # column headers for each discount rate: seq(0, 7, by = 0.1)
 rownames(npv_econ_medians) <- years
@@ -247,7 +467,7 @@ colnames(npv_social_medians) <- drcolnames # column headers for each discount ra
 rownames(npv_social_medians) <- years
 
 # Create a cumulative sum of co-benefit value 
-coben_cumsum <- as.data.frame(t(apply(total_coben_value, 1, cumsum)))
+coben_cumsum <- as.data.frame(t(apply(coben_value_trim, 1, cumsum)))
 median_coben_value <- data.frame(t(apply(coben_cumsum, 2, median))) # The median cumulative NPV value for each year is taken
 median_coben_value_vector <- as.vector(unlist(median_coben_value))
 
