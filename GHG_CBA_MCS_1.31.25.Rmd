@@ -19,6 +19,8 @@ if (!require("scales")) install.packages("scales")
 library(scales)
 if (!require("data.table")) install.packages("data.table")
 library(data.table)
+if (!require("gridExtra")) install.packages("gridExtra")
+library(gridExtra)
 ```
 
 Set up global variables
@@ -459,218 +461,106 @@ write_xlsx(summary_outputlist, path = "summary_output.xlsx")
 
 ```
 
-CBA Indicator calcs with discount rate range and Monte Carlo Minulation statistics
+Plot: GHG Mitigation
+```{r}
+ghg_mcs_stats(lower_bound = .25, upper_bound = .75)
+
+ghg_stats$year <- as.numeric(ghg_stats$year) # need to convert year column to numeric
+
+# GHG mitigation plot
+ggplot(ghg_stats, aes(x = year, y = ghg_median)) +
+  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
+  geom_ribbon(aes(ymin = ghg_lb, ymax = ghg_ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
+  labs(title = "GHG Mitigation",
+       x = "Year",
+       y = "Metric tons CO2e") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  scale_x_continuous(
+    breaks = seq(scenario_start, scenario_end, by = 5),
+    labels = seq(scenario_start, scenario_end, by = 5)) +
+  theme_minimal()
+
+
+
+```
+
+CBA Indicator calcs with discount rate range and Monte Carlo Simulation statistics
 ```{r}
 # Calculates three seperate tables of NPV for private, economic and social costs, using the range of discount rates provided
+dr_lb <- 1
+dr_ub <- 8
 
-cba_discountrange(dr_min = 0, dr_max = 7, scenario_lifetime = scenario_years)
+cba_discountrange(dr_min = dr_lb, dr_max = dr_ub, scenario_lifetime = scenario_years)
 
 # Calculates statistics for the Monte Carlo Simulation (lower bound, median, and upper bound)
 
-mcs_stats(lower_bound = .25, upper_bound = .75)
+cba_mcs_stats(lower_bound = .25, upper_bound = .75)
 
-```
-
-NPV Matrix
-```{r}
-# Econ NPV matrix
-npv_econ_medians <- data.frame(matrix(NA, nrow = 26, ncol = 71))
-years <- output_headers
-drcolnames <- paste0("dr",((0:70)/10))
-colnames(npv_econ_medians) <- drcolnames # column headers for each discount rate: seq(0, 7, by = 0.1)
-rownames(npv_econ_medians) <- years
-
-# Social NPV matrix
-npv_social_medians <- data.frame(matrix(NA, nrow = 26, ncol = 71)) 
-colnames(npv_social_medians) <- drcolnames # column headers for each discount rate: seq(0, 7, by = 0.1)
-rownames(npv_social_medians) <- years
-
-# Create a cumulative sum of co-benefit value 
-coben_cumsum <- as.data.frame(t(apply(coben_value_trim, 1, cumsum)))
-median_coben_value <- data.frame(t(apply(coben_cumsum, 2, median))) # The median cumulative NPV value for each year is taken
-median_coben_value_vector <- as.vector(unlist(median_coben_value))
-
-for (i in 0:70) { # the loop repeats for each discount rate seq(0, 7, by = 0.1)
-  drvalues <- numeric(26) # an empty vector 'drvalues' is created to house the loop outputs
-  drvalues[1] <- 1        
-    for (n in 2:26) {
-         drvalues[n] <- (1+(i/1000))^(n-1) # drvalues is populated with the discount rate conversion factor for each year
-    }
-  drvalues_df <- data.frame(t(drvalues)) # make a dataframe out of the discount rate loop output
-  discount_df <- drvalues_df[rep(1, run_count),] # the discount rate vector is replicated into rows equal to the MCS run count
-  annual_npv_econ <- cashflow_econ/discount_df # the total annual economic cash flow is converted into NPV
-  annual_npv_econ_cumsum <- as.data.frame(t(apply(annual_npv_econ, 1, cumsum))) # npv is summed cumulatively for each year
-  median_npv_econ <- data.frame(t(apply(annual_npv_econ_cumsum, 2, median))) # median cumulative NPV value is taken for each year
-  median_npv_vector <- as.vector(unlist(median_npv_econ))
-  median_npv_social <- median_npv_vector + median_coben_value_vector# calculate the social npv
-  npv_econ_medians[,i+1] <- median_npv_vector #bind the economic NPV values for the given discount rate
-  npv_social_medians[,i+1] <- median_npv_social #bind the NPV social values for the given discount rate
-}
-
-```
-
-Plot: Annual GHG Mitigation
-```{r}
-
-median_mitigation <- as.data.frame(t(apply(p1_ghg_mitigation, 2, median)))
-cumulative_mitigation <- as.data.frame(t(apply(median_mitigation, 1, cumsum)))
-mitigation_plot_data <- data.frame(
-  Year1 = 2025:2050,
-  Annual1 = unlist(median_mitigation[1,]),
-  Cumulative1 = unlist(cumulative_mitigation[1,])
-)
-
-# Create the chart with a legend for cumulative and annual data
-ggplot(mitigation_plot_data, aes(x = Year1)) +
-  # Bar chart for cumulative data
-  geom_bar(aes(y = Cumulative1, fill = "Cumulative Mitigation"), 
-           stat = "identity", color = "black", width = 0.4, alpha = 0.7) +
-  # Line chart for annual data
-  geom_line(aes(y = Annual1 / max(Annual1) * max(Cumulative1), linetype = "Annual Mitigation"), 
-            color = "black", linewidth = 1) +
-  # Scale the primary y-axis and format with commas
-  scale_y_continuous(
-    name = "Cumulative GHG Reductions (mtco2e)",
-    labels = label_comma(),  # Apply comma formatting to primary y-axis
-    #breaks = seq(0, max(mitigation_plot_data$Cumulative1), by = 100),  # Adjust the 'by' parameter to control spacing
-    sec.axis = sec_axis(
-      ~ . * max(mitigation_plot_data$Annual1) / max(mitigation_plot_data$Cumulative1),
-      name = "Annual GHG Reductions (mtco2e)",
-      labels = label_comma()  # Apply comma formatting to secondary y-axis
-    )
-  ) +
-  # Customize labels and theme
-  labs(
-    title = "Estimate of GHG Mitigation",
-    x = "Year"
-  ) +
-  scale_fill_manual(values = c("Cumulative Mitigation" = "green4")) +  # Color for cumulative bars
-  scale_linetype_manual(values = c("Annual Mitigation" = "dashed")) +  # Line style for annual data
-  theme_minimal() +
-  theme(
-    legend.position = "bottom",  # Position the legend at the top
-    legend.title = element_blank()  # Remove the legend title (Data Type)
-  ) +
-  guides(
-    fill = guide_legend(title = NULL),  # Remove the legend title for fill (bars)
-    linetype = guide_legend(title = NULL)  # Remove the legend title for linetype (line)
-    )
 ```
 
 Plot: NPV Histograms
 ```{r}
-# Histogram of Economic NPV with 3% discount rate
-npv_econ <- as.data.frame(npv_econ_dr[,30])
-npv_econ_median <- npv_econ_stats[31,2]
-npv_econ_lb <- npv_econ_stats[31,3]
-npv_econ_ub <- npv_econ_stats[31,4]
+# Histogram of Economic NPV with 3.5% discount rate
+npv_econ <- as.data.frame(npv_econ_dr[,26]) # the 26th row of npv_econ_dr corresponds with a 3% dr. Check npv_stats for column number = dr rate 
+npv_econ_lb <- npv_stats[26,5] # Row 26 corresponds to a 3.5 % dr. Column 5, 6, and 7 are the stats for economic npv
+npv_econ_median <- npv_stats[26,6]
+npv_econ_ub <- npv_stats[26,7]
+npv_econ_bin <- (npv_econ_median - npv_econ_lb)/3
 
 ggplot(npv_econ, aes(x = npv_econ[,1])) +
-  geom_histogram(binwidth = 20000, fill = "darkgrey", color = "black", alpha = 0.7) +
+  geom_histogram(binwidth = npv_econ_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
   geom_vline(aes(xintercept = npv_econ_median), color = "red", linetype = "dashed", size = 1) +  # median line
   geom_vline(aes(xintercept = npv_econ_lb), color = "green", linetype = "dotted", size = 1) +  # lower bound
   geom_vline(aes(xintercept = npv_econ_ub), color = "green", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "Histogram of Economic NPV, with median and 25-75% percentiles", x = "npv", y = "Frequency") +
-  scale_x_continuous(breaks = seq(-1000000, 1000000, by = 100000), labels = scales::comma) # need to adjust scales manually
+  labs(title = "Histogram of Economic NPV, with median and 25-75% percentiles", x = "npv", y = "Frequency") + 
+  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10))
 
 # Histogram of Social NPV with 3% discount rate
-npv_social <- as.data.frame(npv_social_dr[,30])
-npv_social_median <- npv_social_stats[31,2]
-npv_social_lb <- npv_social_stats[31,3]
-npv_social_ub <- npv_social_stats[31,4]
+npv_social <- as.data.frame(npv_social_dr[,26]) # the 26th row of npv_social_dr corresponds with a 3% dr. Check npv_stats for column number = dr rate 
+npv_social_lb <- npv_stats[26,8] # Row 26 corresponds to a 3.5 % dr. Column 5, 6, and 7 are the stats for social npv
+npv_social_median <- npv_stats[26,9]
+npv_social_ub <- npv_stats[26,10]
+npv_social_bin <- (npv_social_median - npv_social_lb)/3
 
 ggplot(npv_social, aes(x = npv_social[,1])) +
-  geom_histogram(binwidth = 20000, fill = "darkgrey", color = "black", alpha = 0.7) +
+  geom_histogram(binwidth = npv_social_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
   geom_vline(aes(xintercept = npv_social_median), color = "red", linetype = "dashed", size = 1) +  # median line
   geom_vline(aes(xintercept = npv_social_lb), color = "green", linetype = "dotted", size = 1) +  # lower bound
   geom_vline(aes(xintercept = npv_social_ub), color = "green", linetype = "dotted", size = 1) +  # upper bound
   labs(title = "Histogram of Social NPV, with median and 25-75% percentiles", x = "npv", y = "Frequency") +
-  scale_x_continuous(breaks = seq(-1000000, 1000000, by = 100000), labels = scales::comma) # need to adjust scales manually
-
-# Overlayed NPV Histograms
-set.seed(123)
-npv1 <- npv_econ[,1]
-npv2 <- npv_social[,1]
-
-# Combine the two datasets into a single data frame
-npvplotdf <- data.frame(
-  value = c(npv1, npv2),
-  Dataset = rep(c("Economic LCCA", "Social LCCA"), each = 1000)
-)
-
-# Plot two histograms on top of each other
-ggplot(npvplotdf, aes(x = value, fill = Dataset)) +
-  geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
-  geom_vline(aes(xintercept = npv_econ_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = npv_social_median), color = "darkgreen", linetype = "dashed", size = 1) +  # lower bound
-  scale_fill_manual(values = c("darkblue", "darkgreen")) +  # Custom colors for the two datasets
-  labs(title = "Overlayed NPV Histograms with Median on Dashed Line", x = "NPV", y = "Frequency") +
-  scale_x_continuous(breaks = seq(-1000000, 1000000, by = 200000), labels = scales::comma) # need to adjust scales manually
+  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10))
 
 ```
-
 Plot: NPV Based on discount rate
 ```{r, eval = FALSE}
-# Economic NPV
-# Convert years to numeric for plotting
-npv_econ_medians$year <- years
 
-# Convert discount rate to numeric for plotting
-npv_econ_medians$year <- as.numeric(npv_econ_medians$year)
+npv_stats$dr <- as.numeric(npv_stats$dr) # need to convert discount rate column to numeric
 
-# plot
-ggplot(npv_econ_medians, aes(x = year, y = dr3)) +
-  geom_line(color = "darkblue", size = 1) +                      # Line for the mean
-  geom_ribbon(aes(ymin = dr0, ymax = dr7), fill = "darkblue", alpha = 0.2) +  # Shaded confidence interval
-  labs(title = "NPV at a 3% Discount rate, with 0% - 7% discount rate shaded",
-       x = "Year",
-       y = "USD") +
-  scale_y_continuous(breaks = seq(-1000000, 1000000, by = 200000),labels = comma) + # Format y-axis with commas
+# Econ NPV plot
+ggplot(npv_stats, aes(x = dr, y = econ_median)) +
+  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
+  geom_ribbon(aes(ymin = econ_lb, ymax = econ_ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
+  labs(title = "NPV based on the discount rate, with 25% - 75% confidence range shaded",
+       x = "Discount Rate",
+       y = "NPV ($)") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  scale_x_continuous(
+    breaks = seq(dr_lb, dr_ub, by = 1),
+    labels = seq(dr_lb, dr_ub, by = 1)) +
   theme_minimal()
 
-# Scoial NPV
-# Convert years to numeric for plotting
-npv_social_medians$year <- years
-
-# Convert discount rate to numeric for plotting
-npv_social_medians$year <- as.numeric(npv_social_medians$year)
-
-# plot
-ggplot(npv_social_medians, aes(x = year, y = dr3)) +
-  geom_line(color = "darkgreen", size = 1) +                      # Line for the mean
-  geom_ribbon(aes(ymin = dr0, ymax = dr7), fill = "darkgreen", alpha = 0.2) +  # Shaded confidence interval
-  labs(title = "NPV at a 3% Discount rate, with 0% - 7% discount rate shaded",
-       x = "Year",
-       y = "USD") +
-  scale_y_continuous(breaks = seq(-1000000, 1000000, by = 200000),labels = comma) + # Format y-axis with commas
+# Social NPV plot
+ggplot(npv_stats, aes(x = dr, y = soc_median)) +
+  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
+  geom_ribbon(aes(ymin = soc_lb, ymax = soc_ub, group = 1), fill = "darkblue", alpha = 0.5) +  # Shaded confidence interval
+  labs(title = "NPV based on the discount rate, with 25% - 75% confidence range shaded",
+       x = "Discount Rate",
+       y = "NPV ($)") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  scale_x_continuous(
+    breaks = seq(dr_lb, dr_ub, by = 1),
+    labels = seq(dr_lb, dr_ub, by = 1)) +
   theme_minimal()
-
-# Overlayed Line Plot
-# New datasets for Overlay
-econnpv_overlay <- npv_econ_medians
-socialnpv_overlay <- npv_social_medians
-
-# Add group name
-econnpv_overlay$group <- "Economic NPV"
-socialnpv_overlay$group <- "Social NPV"
-
-# Combine datasets
-npv_overlayline_data <- rbind(econnpv_overlay, socialnpv_overlay)
-
-# Create the plot
-ggplot(npv_overlayline_data, aes(x = year, y = dr3, group = group)) +
-  geom_ribbon(aes(ymin = dr2, ymax = dr4, fill = group), alpha = 0.2) +
-  geom_line(aes(color = group), size = 1) +
-  scale_fill_manual(values = c("Economic NPV" = "darkblue", "Social NPV" = "darkgreen")) +
-  scale_color_manual(values = c("Economic NPV" = "darkblue", "Social NPV" = "darkgreen")) +
-  theme_minimal() +
-  scale_y_continuous(breaks = seq(-1000000, 1000000, by = 200000),labels = comma) + # Format y-axis with commas
-  labs(title = "NPV at a 3% Discount rate, with 2% - 4% discount rate shaded",
-       x = "Year",
-       y = "USD",
-       fill = "npv_overlayline_data",
-       color = "npv_overlayline_data")
-
 ```
 
 Plot: LCCA Histograms
@@ -704,7 +594,6 @@ ggplot(lcca_social, aes(x = lcca_social[,1])) +
   scale_x_continuous(breaks = seq(-500, 500, by = 50), labels = scales::comma) # need to adjust scales manually
 
 # Overlayed lcca Histograms
-set.seed(123)
 lcca1 <- lcca_econ[,1]
 lcca2 <- lcca_social[,1]
 

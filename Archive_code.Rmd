@@ -1,0 +1,43 @@
+---
+title: "Archive_code"
+output: html_document
+---
+
+```{r}
+# Create the chart with a legend for cumulative and annual data - Copy of AZ PCAP charts
+ggplot(mitigation_plot_data, aes(x = Year1)) +
+  # Bar chart for cumulative data
+  geom_bar(aes(y = Cumulative1, fill = "Cumulative Mitigation"), 
+           stat = "identity", color = "black", width = 0.4, alpha = 0.7) +
+  # Line chart for annual data
+  geom_line(aes(y = Annual1 / max(Annual1) * max(Cumulative1), linetype = "Annual Mitigation"), 
+            color = "black", linewidth = 1) +
+  # Scale the primary y-axis and format with commas
+  scale_y_continuous(
+    name = "Cumulative GHG Reductions (mtco2e)",
+    labels = label_comma(),  # Apply comma formatting to primary y-axis
+    #breaks = seq(0, max(mitigation_plot_data$Cumulative1), by = 100),  # Adjust the 'by' parameter to control spacing
+    sec.axis = sec_axis(
+      ~ . * max(mitigation_plot_data$Annual1) / max(mitigation_plot_data$Cumulative1),
+      name = "Annual GHG Reductions (mtco2e)",
+      labels = label_comma()  # Apply comma formatting to secondary y-axis
+    )
+  ) +
+  # Customize labels and theme
+  labs(
+    title = "Estimate of GHG Mitigation",
+    x = "Year"
+  ) +
+  scale_fill_manual(values = c("Cumulative Mitigation" = "green4")) +  # Color for cumulative bars
+  scale_linetype_manual(values = c("Annual Mitigation" = "dashed")) +  # Line style for annual data
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",  # Position the legend at the top
+    legend.title = element_blank()  # Remove the legend title (Data Type)
+  ) +
+  guides(
+    fill = guide_legend(title = NULL),  # Remove the legend title for fill (bars)
+    linetype = guide_legend(title = NULL)  # Remove the legend title for linetype (line)
+    )
+```
+
