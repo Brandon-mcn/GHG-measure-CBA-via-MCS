@@ -82,8 +82,8 @@ calc_ad1("ashp_ref_ann_data1",
          units = "kWh")
 
 # Calculate cumulative activity data
-cumul_sum("ashp_ref_data1", ashp_ref_ann_data1)
-cumul_sum("ashp_intv_data1", ashp_intv_ann_data1)
+cumul_sum2("ashp_ref_data1", ashp_ref_ann_data1)
+cumul_sum2("ashp_intv_data1", ashp_intv_ann_data1)
 
 # Simulate annual natural gas consumption for space heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
 calc_ad1("ashp_ref_ann_data2",
@@ -96,8 +96,8 @@ calc_ad1("ashp_ref_ann_data2",
          units = "therms")
 
 # Calculate cumulative activity data
-cumul_sum("ashp_ref_data2", ashp_ref_ann_data2)
-cumul_sum("ashp_intv_data2", ashp_intv_ann_data2)
+cumul_sum2("ashp_ref_data2", ashp_ref_ann_data2)
+cumul_sum2("ashp_intv_data2", ashp_intv_ann_data2)
 
 # ASHP Capex is calculated by simulating the installation costs for each home
 calculate_capex("ashp_ref_capex1", "ashp_intv_capex1", ref_boundary_mgnl, ashp_boundary_mgnl, capex_min = 2100, capex_max = 6000, units = "USD")
@@ -153,8 +153,8 @@ calc_ad1("weatherize_ref_ann_data1",
          units = "kWh")
 
 # Calculate cumulative activity data
-cumul_sum("weatherize_ref_data1", weatherize_ref_ann_data1)
-cumul_sum("weatherize_intv_data1", weatherize_intv_ann_data1)
+cumul_sum2("weatherize_ref_data1", weatherize_ref_ann_data1)
+cumul_sum2("weatherize_intv_data1", weatherize_intv_ann_data1)
 
 # Simulate annual natural gas consumption for space heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
 calc_ad1("weatherize_ref_ann_data2",
@@ -167,8 +167,8 @@ calc_ad1("weatherize_ref_ann_data2",
          units = "therms")
 
 # Calculate cumulative activity data
-cumul_sum("weatherize_ref_data2", weatherize_ref_ann_data2)
-cumul_sum("weatherize_intv_data2", weatherize_intv_ann_data2)
+cumul_sum2("weatherize_ref_data2", weatherize_ref_ann_data2)
+cumul_sum2("weatherize_intv_data2", weatherize_intv_ann_data2)
 
 # Weatherization Capex is calculated by simulating the installation costs for each home
 calculate_capex("weatherize_ref_capex1", "weatherize_intv_capex1", ref_boundary_mgnl, weatherize_boundary_mgnl, capex_min = 1879, capex_max = 2962, units = "USD")
@@ -224,8 +224,8 @@ calc_ad1("hpwh_ref_ann_data1",
          units = "kWh")
 
 # Calculate cumulative activity data
-cumul_sum("hpwh_ref_data1", hpwh_ref_ann_data1)
-cumul_sum("hpwh_intv_data1", hpwh_intv_ann_data1)
+cumul_sum2("hpwh_ref_data1", hpwh_ref_ann_data1)
+cumul_sum2("hpwh_intv_data1", hpwh_intv_ann_data1)
 
 # Simulate annual natural gas consumption for space heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
 calc_ad1("hpwh_ref_ann_data2",
@@ -238,8 +238,8 @@ calc_ad1("hpwh_ref_ann_data2",
          units = "therms")
 
 # Calculate cumulative activity data
-cumul_sum("hpwh_ref_data2", hpwh_ref_ann_data2)
-cumul_sum("hpwh_intv_data2", hpwh_intv_ann_data2)
+cumul_sum2("hpwh_ref_data2", hpwh_ref_ann_data2)
+cumul_sum2("hpwh_intv_data2", hpwh_intv_ann_data2)
 
 # HPWH Capex is calculated by simulating the installation costs for each home
 calculate_capex("hpwh_ref_capex1", "hpwh_intv_capex1", ref_boundary_mgnl, hpwh_boundary_mgnl, capex_min = 1300, capex_max = 2900, units = "USD")

@@ -197,7 +197,7 @@ scenario_MCS <- function(param_name, sheet_name, units){
 
 ### Activity data calculation 1 - Reference scenario is a baseline, intervention is a % reduction from the baseline
 
-calc_ad1 <- function(ref_name, intv_name, boundary_df, ref_pdf, ref_params, intv_pdf, intv_params, intv_life, units){
+calc_ad1 <- function(ref_name, intv_name, boundary_df, ref_pdf, ref_params, intv_pdf, intv_params, units){
   #initiate empty dataframe 
   ref_out <- matrix(0, nrow = run_count, ncol = scenario_years)
   intv_out <- matrix(0, nrow = run_count, ncol = scenario_years)
@@ -221,9 +221,6 @@ calc_ad1 <- function(ref_name, intv_name, boundary_df, ref_pdf, ref_params, intv
       intv_out[i, j] <- intv_sum
     }
   }
-  
-  #ref_out_subest <- ref_out[, (intv_years + 1):(intv_years + intv_life)]
-  #ref_out_subset2 <- ref_out[, 1:(intv_years + intv_life)]
   
   ref_out <- as.data.frame(ref_out)
   colnames(ref_out) <- output_headers
@@ -292,15 +289,35 @@ assign_projecttype <- function(intervention_sim){
   
 }
 
-### Cumulative sum calculation
+### Cumulative sum calculation 1 - Basic cumulative sum, preserving the units column
 
-cumul_sum <- function(param_name, df){
+cumul_sum1 <- function(param_name, df){
   values <- df[, -1]
   df_cumsum <- as.data.frame(t(apply(values, 1, cumsum)))
   df_cumsum <- df_cumsum %>%
     mutate(unit = df[1,1]) %>%  # Add "unit" column with user 'units' input as value
     select(unit, everything())  # Move "unit" to the first position
   assign(param_name, df_cumsum, envir = .GlobalEnv)
+}
+
+### Cumulative sum calculation 2 - Custom cumulative sum based on intervention lifetime
+
+cumul_sum2 <- function(param_name, df, intv_life = intv_lifetime){
+  df_trim <- df[, -1]
+  df_result <- df[, -1]
+  for (i in 1:run_count) {  # Loop through each row
+    for (j in 2:scenario_years) {  # Start from column 2
+      if (j <= intv_life) {
+        df_result[i, j] <- sum(df_trim[i, 1:j])  # Regular cumulative sum
+      } else {
+        df_result[i, j] <- sum(df_trim[i, (j-(intv_life-1)):j])  # Rolling sum of the active intervention instances
+      }
+    }
+  }
+  df_result <- df_result %>%
+    mutate(unit = df[1,1]) %>%  # Add "unit" column with user 'units' input as value
+    select(unit, everything())  # Move "unit" to the first position
+  assign(param_name, df_result, envir = .GlobalEnv)
 }
 
 ### Capex calculation
