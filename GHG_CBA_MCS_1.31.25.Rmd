@@ -43,13 +43,13 @@ source("parameter_functions.r")
 Create CO2e Emission Factor Library
 ```{r}
 EFL_co2e("ar6")
-write_xlsx(EFL, path = "EFLco2e.xlsx")
+write_xlsx(EFL, path = "EFLco2e.xlsx") 
 ```
 
 Emission Factor Simulations
 ```{r}
 # Electricity emission factor
-scenario_MCS("ef_sim_electricity", sheet_name = "electricity_ef", units = "kgco2e/kWh")
+scenario_MCS("ef_sim_electricity", sheet_name = "electricity_ef", units = "kgco2e/kWh") #write a custome function for electricity? with the starting value as a input? And NREL grid region as an input as well. 
 
 # Supply Chain emission factor
 continuous_uniform2("ef_sim_appliances_upstream", minvalue = 0.079, maxvalue = 0.161, units = "kgco2e/USD")
@@ -452,8 +452,6 @@ summary_outputlist <- (list("cashflow_investment" = cashflow_investment,
                          "ref_opex_total" = ref_opex_total)
 )
 
-#write excel and save p1 outputs (NOTE: Change names for each parameter)
-
 write_xlsx(ashp_outputlist, path = "ashp_output.xlsx")
 write_xlsx(weatherize_outputlist, path = "weatherize_output.xlsx")
 write_xlsx(hpwh_outputlist, path = "hpwh_output.xlsx")
@@ -461,9 +459,14 @@ write_xlsx(summary_outputlist, path = "summary_output.xlsx")
 
 ```
 
-Plot: GHG Mitigation
+Plot: Electricity
 ```{r}
-ghg_mcs_stats(lower_bound = .25, upper_bound = .75)
+ref_kwh <- ashp_ref_data1[,-1] + weatherize_ref_data1[,-1] + hpwh_ref_data1[,-1]
+ref_kwh <- ref_kwh %>%
+    mutate(unit = "kWh") %>%
+    select(unit, everything())  
+
+mcs_stats("ref_kWh_stats", ref_kwh, lower_bound = .25, upper_bound = .75)
 
 ghg_stats$year <- as.numeric(ghg_stats$year) # need to convert year column to numeric
 
@@ -480,7 +483,26 @@ ggplot(ghg_stats, aes(x = year, y = ghg_median)) +
     labels = seq(scenario_start, scenario_end, by = 5)) +
   theme_minimal()
 
+```
 
+Plot: GHG Mitigation
+```{r}
+mcs_stats("ghg_stats", ghg_mitigation, lower_bound = .25, upper_bound = .75)
+
+ghg_stats$year <- as.numeric(ghg_stats$year) # need to convert year column to numeric
+
+# GHG mitigation plot
+ggplot(ghg_stats, aes(x = year, y = ghg_median)) +
+  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
+  geom_ribbon(aes(ymin = ghg_lb, ymax = ghg_ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
+  labs(title = "GHG Mitigation",
+       x = "Year",
+       y = "Metric tons CO2e") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  scale_x_continuous(
+    breaks = seq(scenario_start, scenario_end, by = 5),
+    labels = seq(scenario_start, scenario_end, by = 5)) +
+  theme_minimal()
 
 ```
 
@@ -509,11 +531,12 @@ npv_econ_bin <- (npv_econ_median - npv_econ_lb)/3
 
 ggplot(npv_econ, aes(x = npv_econ[,1])) +
   geom_histogram(binwidth = npv_econ_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
-  geom_vline(aes(xintercept = npv_econ_median), color = "red", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = npv_econ_lb), color = "green", linetype = "dotted", size = 1) +  # lower bound
-  geom_vline(aes(xintercept = npv_econ_ub), color = "green", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "Histogram of Economic NPV, with median and 25-75% percentiles", x = "npv", y = "Frequency") + 
-  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10))
+  geom_vline(aes(xintercept = npv_econ_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
+  geom_vline(aes(xintercept = npv_econ_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
+  geom_vline(aes(xintercept = npv_econ_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
+  labs(title = "Histogram of Economic NPV at r = 3.5, with median and 25-75% percentiles", x = "npv", y = "Frequency") + 
+  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  theme_minimal()
 
 # Histogram of Social NPV with 3% discount rate
 npv_social <- as.data.frame(npv_social_dr[,26]) # the 26th row of npv_social_dr corresponds with a 3% dr. Check npv_stats for column number = dr rate 
@@ -524,11 +547,12 @@ npv_social_bin <- (npv_social_median - npv_social_lb)/3
 
 ggplot(npv_social, aes(x = npv_social[,1])) +
   geom_histogram(binwidth = npv_social_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
-  geom_vline(aes(xintercept = npv_social_median), color = "red", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = npv_social_lb), color = "green", linetype = "dotted", size = 1) +  # lower bound
-  geom_vline(aes(xintercept = npv_social_ub), color = "green", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "Histogram of Social NPV, with median and 25-75% percentiles", x = "npv", y = "Frequency") +
-  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10))
+  geom_vline(aes(xintercept = npv_social_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
+  geom_vline(aes(xintercept = npv_social_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
+  geom_vline(aes(xintercept = npv_social_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
+  labs(title = "Histogram of Social NPV at r = 3.5, with median and 25-75% percentiles", x = "npv", y = "Frequency") +
+  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  theme_minimal()
 
 ```
 Plot: NPV Based on discount rate
@@ -563,118 +587,15 @@ ggplot(npv_stats, aes(x = dr, y = soc_median)) +
   theme_minimal()
 ```
 
-Plot: LCCA Histograms
+Plot: SROI 
 ```{r}
-# Histogram of Economic NPV with 3% discount rate
-lcca_econ <- as.data.frame(lcca_econ_dr[,30])
-lcca_econ_median <- lcca_econ_stats[31,2]
-lcca_econ_lb <- lcca_econ_stats[31,3]
-lcca_econ_ub <- lcca_econ_stats[31,4]
 
-ggplot(lcca_econ, aes(x = lcca_econ[,1])) +
-  geom_histogram(binwidth = 20, fill = "blue", color = "black", alpha = 0.7) +
-  geom_vline(aes(xintercept = lcca_econ_median), color = "red", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = lcca_econ_lb), color = "green", linetype = "dotted", size = 1) +  # lower bound
-  geom_vline(aes(xintercept = lcca_econ_ub), color = "green", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "Histogram of Economic lcca, with median and 25-75% percentiles", x = "lcca", y = "Frequency") +
-  scale_x_continuous(breaks = seq(-500, 500, by = 50), labels = scales::comma) # need to adjust scales manually
-
-# Histogram of Social lcca with 3% discount rate
-lcca_social <- as.data.frame(lcca_social_dr[,30])
-lcca_social_median <- lcca_social_stats[31,2]
-lcca_social_lb <- lcca_social_stats[31,3]
-lcca_social_ub <- lcca_social_stats[31,4]
-
-ggplot(lcca_social, aes(x = lcca_social[,1])) +
-  geom_histogram(binwidth = 20, fill = "blue", color = "black", alpha = 0.7) +
-  geom_vline(aes(xintercept = lcca_social_median), color = "red", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = lcca_social_lb), color = "green", linetype = "dotted", size = 1) +  # lower bound
-  geom_vline(aes(xintercept = lcca_social_ub), color = "green", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "Histogram of Social lcca, with median and 25-75% percentiles", x = "lcca", y = "Frequency") +
-  scale_x_continuous(breaks = seq(-500, 500, by = 50), labels = scales::comma) # need to adjust scales manually
-
-# Overlayed lcca Histograms
-lcca1 <- lcca_econ[,1]
-lcca2 <- lcca_social[,1]
-
-# Combine the two datasets into a single data frame
-lccaplotdf <- data.frame(
-  value = c(lcca1, lcca2),
-  Dataset = rep(c("Economic LCCA", "Social LCCA"), each = 1000)
-)
-
-# Plot two histograms on top of each other
-ggplot(lccaplotdf, aes(x = value, fill = Dataset)) +
-  geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
-  geom_vline(aes(xintercept = lcca_econ_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = lcca_social_median), color = "darkgreen", linetype = "dashed", size = 1) +  # lower bound
-  scale_fill_manual(values = c("darkblue", "darkgreen")) +  # Custom colors for the two datasets
-  labs(title = "Overlayed LCCA Histograms with Median on Dashed Line", x = "Value", y = "Frequency") +
-  scale_x_continuous(breaks = seq(-500, 500, by = 100), labels = scales::comma) # need to adjust scales manually
 
 ```
 
-Plot: LCCA Based on discount rate
-```{r, eval = FALSE}
-# Economic LCCA
-# Convert discount rate to numeric for plotting
-lcca_econ_stats$DR <- as.numeric(lcca_econ_stats$DR)
 
-# Filter the confidence results to get rid of any years with zero lcca
-plot2_data <- subset(lcca_econ_stats, Median != 0)
+Plot: LCCA 
+```{r}
 
-# plot
-ggplot(plot2_data, aes(x = DR, y = Median)) +
-  geom_line(color = "darkblue", size = 1) +                      # Line for the mean
-  geom_ribbon(aes(ymin = Lower, ymax = Upper), fill = "darkblue", alpha = 0.2) +  # Shaded confidence interval
-  labs(title = "Median, with 25-75% percentile range shaded",
-       x = "Discount Rate",
-       y = "LCCA") +
-  theme_minimal()
-
-# Scoial LCCA
-# Convert discount rate to numeric for plotting
-lcca_social_stats$DR <- as.numeric(lcca_social_stats$DR)
-
-# Filter the confidence results to get rid of any years with zero lcca
-plot3_data <- subset(lcca_econ_stats, Median != 0)
-
-# plot
-ggplot(plot3_data, aes(x = DR, y = Median)) +
-  geom_line(color = "darkgreen", size = 1) +                      # Line for the mean
-  geom_ribbon(aes(ymin = Lower, ymax = Upper), fill = "darkgreen", alpha = 0.2) +  # Shaded confidence interval
-  labs(title = "Median, with 25-75% percentile range shaded",
-       x = "Discount Rate",
-       y = "LCCA") +
-  theme_minimal()
-
-# Overlayed Line Plot
-# Convert discount rate to numeric for plotting
-lcca_econ_stats$DR <- as.numeric(lcca_econ_stats$DR)
-lcca_social_stats$DR <- as.numeric(lcca_social_stats$DR)
-
-# Filter the confidence results to get rid of any years with zero lcca
-econlcca_linedata <- subset(lcca_econ_stats, Median != 0)
-sociallcca_line_data <- subset(lcca_social_stats, Median != 0)
-
-# Add group name
-econlcca_linedata$group <- "Economic LCCA"
-sociallcca_line_data$group <- "Social LCCA"
-
-# Combine datasets
-overlayline_data <- rbind(econlcca_linedata, sociallcca_line_data)
-
-# Create the plot
-ggplot(overlayline_data, aes(x = DR, y = Median, group = group)) +
-  geom_ribbon(aes(ymin = Lower, ymax = Upper, fill = group), alpha = 0.2) +
-  geom_line(aes(color = group), size = 1) +
-  scale_fill_manual(values = c("Economic LCCA" = "darkblue", "Social LCCA" = "darkgreen")) +
-  scale_color_manual(values = c("Economic LCCA" = "darkblue", "Social LCCA" = "darkgreen")) +
-  theme_minimal() +
-  labs(title = "Median LCCA, with 25-75% percentile range shaded",
-       x = "Discount Rate",
-       y = "LCCA",
-       fill = "overlayline_data",
-       color = "overlayline_data")
 
 ```

@@ -477,6 +477,42 @@ ghg_conversion3 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
   assign(intv_name, intv_ghg, envir = .GlobalEnv)
 }
 
+### Calculate MCS stats based on input
+
+mcs_stats <- function(param_name, df, lower_bound = 0.25, upper_bound = .75){
+  stats_out <- data.frame(
+    year = character(),
+    ghg_lb = numeric(),
+    ghg_median = numeric(),
+    ghg_ub = numeric(),
+    stringsAsFactors = FALSE)
+  
+  cumsum <- as.data.frame(t(apply(df[, -1], 1, cumsum)))
+  loop_count = ncol(cumsum)
+  
+  for (i in 1:loop_count) {
+    # Extract the values for each year
+    g_values <- cumsum[,i]
+    
+    # Calculate statistics
+    g_median <- median(g_values)        
+    g_lower_bound <- quantile(g_values, probs = lower_bound)
+    g_upper_bound <- quantile(g_values, probs = upper_bound)
+    
+    # Append results to the results dataframe
+    stats_out <- rbind(
+      stats_out,
+      data.frame(
+        year = colnames(ghg_cumsum)[i],
+        ghg_lb = g_lower_bound,
+        ghg_median = g_median,
+        ghg_ub = g_upper_bound))
+  }
+  
+  rownames(stats_out) <- NULL
+  assign(param_name, stats_out, envir = .GlobalEnv)
+}
+
 ### Calculate CBA indicators (NPV, SROI, LCCA) at different discount rates
 
 cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = scenario_years){
@@ -595,45 +631,9 @@ cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = scenario_years
   assign("lcca_social_dr", lcca_social_dr, envir = .GlobalEnv)
 }
 
-### Calculate GHG mitigation median, ub, and lb 
+### Calculate Monte Carlo Simulation Statistics for CBA (lower bound, median, and upper bound)
 
-ghg_mcs_stats <- function(lower_bound = 0.25, upper_bound = .75){
-  ghg_stats <- data.frame(
-    year = character(),
-    ghg_lb = numeric(),
-    ghg_median = numeric(),
-    ghg_ub = numeric(),
-    stringsAsFactors = FALSE)
-  
-  ghg_cumsum <- as.data.frame(t(apply(ghg_mitigation[, -1], 1, cumsum)))
-  loop_count = ncol(ghg_cumsum)
-  
-  for (i in 1:loop_count) {
-    # Extract the values for each year
-    g_values <- ghg_cumsum[,i]
-    
-    # Calculate statistics
-    g_median <- median(g_values)        
-    g_lower_bound <- quantile(g_values, probs = lower_bound)
-    g_upper_bound <- quantile(g_values, probs = upper_bound)
-    
-    # Append results to the results dataframe
-    ghg_stats <- rbind(
-      ghg_stats,
-      data.frame(
-        year = colnames(ghg_cumsum)[i],
-        ghg_lb = g_lower_bound,
-        ghg_median = g_median,
-        ghg_ub = g_upper_bound))
-  }
-    
-    rownames(ghg_stats) <- NULL
-    assign("ghg_stats", ghg_stats, envir = .GlobalEnv)
-}
-
-### Calculate Monte Carlo Simulation Statistics (lower bound, median, and upper bound)
-
-cba_mcs_stats <- function(lower_bound = 0.25, upper_bound = .75){
+mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
   # NPV MCS stats 
   npv_stats <- data.frame(
     dr = character(),
