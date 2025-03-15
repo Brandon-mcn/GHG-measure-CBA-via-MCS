@@ -670,9 +670,9 @@ Figure 3: GHG Mitigation
 cumul_sum1("ghg_cumul", ghg_mitigation)
 mcs_stats_cumul("ghg_stats", ghg_mitigation[, -1], lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
 total_ghg_mit <- as.data.frame(ghg_cumul[,26]) 
-ghg_lb <- ghg_stats[26,3] 
-ghg_median <- ghg_stats[26,4]
-ghg_ub <- ghg_stats[26,5]
+ghg_lb <- ghg_stats[25,3] 
+ghg_median <- ghg_stats[25,4]
+ghg_ub <- ghg_stats[25,5]
 ghg_bin <- (ghg_median - ghg_lb)/3
 
 ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
@@ -681,7 +681,7 @@ ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
   geom_vline(aes(xintercept = ghg_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
   geom_vline(aes(xintercept = ghg_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
   labs(title = "ghg", x = "Metric Tons CO2e", y = "Frequency") + 
-  #scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
   theme_minimal()
 
 ```
