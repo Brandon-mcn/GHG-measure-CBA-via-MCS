@@ -504,9 +504,9 @@ mcs_stats <- function(param_name, df, lower_bound = 0.25, upper_bound = .75){
       stats_out,
       data.frame(
         year = colnames(ghg_cumsum)[i],
-        ghg_lb = g_lower_bound,
-        ghg_median = g_median,
-        ghg_ub = g_upper_bound))
+        lb = g_lower_bound,
+        median = g_median,
+        ub = g_upper_bound))
   }
   
   rownames(stats_out) <- NULL

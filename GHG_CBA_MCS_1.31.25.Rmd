@@ -468,15 +468,15 @@ ref_kwh <- ref_kwh %>%
 
 mcs_stats("ref_kWh_stats", ref_kwh, lower_bound = .25, upper_bound = .75)
 
-ghg_stats$year <- as.numeric(ghg_stats$year) # need to convert year column to numeric
+ref_kWh_stats$year <- as.numeric(ref_kWh_stats$year) # need to convert year column to numeric
 
 # GHG mitigation plot
-ggplot(ghg_stats, aes(x = year, y = ghg_median)) +
+ggplot(ref_kWh_stats, aes(x = year, y = median)) +
   geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
-  geom_ribbon(aes(ymin = ghg_lb, ymax = ghg_ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
-  labs(title = "GHG Mitigation",
+  geom_ribbon(aes(ymin = lb, ymax = ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
+  labs(title = "ref kwh",
        x = "Year",
-       y = "Metric tons CO2e") +
+       y = "kwh") +
   scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
   scale_x_continuous(
     breaks = seq(scenario_start, scenario_end, by = 5),
