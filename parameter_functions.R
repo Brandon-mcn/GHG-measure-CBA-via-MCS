@@ -477,41 +477,106 @@ ghg_conversion3 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
   assign(intv_name, intv_ghg, envir = .GlobalEnv)
 }
 
-### Calculate MCS stats based on input
+### Calculate MCS stats based on input, annual output
 
-mcs_stats <- function(param_name, df, lower_bound = 0.25, upper_bound = .75){
+mcs_stats_ann <- function(param_name, df, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95){
   stats_out <- data.frame(
-    year = character(),
-    ghg_lb = numeric(),
-    ghg_median = numeric(),
-    ghg_ub = numeric(),
+    year = numeric(),
+    lb1 = numeric(),
+    lb2 = numeric(),
+    median = numeric(),
+    ub2 = numeric(),
+    ub1 = numeric(),
     stringsAsFactors = FALSE)
   
-  cumsum <- as.data.frame(t(apply(df[, -1], 1, cumsum)))
-  loop_count = ncol(cumsum)
+  loop_count = ncol(df)
   
   for (i in 1:loop_count) {
     # Extract the values for each year
-    g_values <- cumsum[,i]
+    l_values <- df[,i]
     
     # Calculate statistics
-    g_median <- median(g_values)        
-    g_lower_bound <- quantile(g_values, probs = lower_bound)
-    g_upper_bound <- quantile(g_values, probs = upper_bound)
+    l_median <- median(l_values)        
+    l_lower_bound1 <- quantile(l_values, probs = lower_bound_out)
+    l_lower_bound2 <- quantile(l_values, probs = lower_bound_in)
+    l_upper_bound2 <- quantile(l_values, probs = upper_bound_in)
+    l_upper_bound1 <- quantile(l_values, probs = upper_bound_out)
     
     # Append results to the results dataframe
     stats_out <- rbind(
       stats_out,
       data.frame(
-        year = colnames(ghg_cumsum)[i],
-        lb = g_lower_bound,
-        median = g_median,
-        ub = g_upper_bound))
+        year = colnames(df)[i],
+        lb1 = l_lower_bound1,
+        lb2 = l_lower_bound2,
+        median = l_median,
+        ub2 = l_upper_bound2,
+        ub1 = l_upper_bound1))
   }
   
   rownames(stats_out) <- NULL
   assign(param_name, stats_out, envir = .GlobalEnv)
 }
+
+
+### Calculate MCS stats based on input, cumulative output
+
+mcs_stats_cumul <- function(param_name, df, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95){
+  stats_out <- data.frame(
+    year = numeric(),
+    lb1 = numeric(),
+    lb2 = numeric(),
+    median = numeric(),
+    ub2 = numeric(),
+    ub1 = numeric(),
+    stringsAsFactors = FALSE)
+  
+  cumsum <- as.data.frame(t(apply(df, 1, cumsum)))
+  loop_count = ncol(cumsum)
+  
+  for (i in 1:loop_count) {
+    # Extract the values for each year
+    l_values <- cumsum[,i]
+    
+    # Calculate statistics
+    l_median <- median(l_values)        
+    l_lower_bound1 <- quantile(l_values, probs = lower_bound_out)
+    l_lower_bound2 <- quantile(l_values, probs = lower_bound_in)
+    l_upper_bound2 <- quantile(l_values, probs = upper_bound_in)
+    l_upper_bound1 <- quantile(l_values, probs = upper_bound_out)
+    
+    # Append results to the results dataframe
+    stats_out <- rbind(
+      stats_out,
+      data.frame(
+        year = colnames(cumsum)[i],
+        lb1 = l_lower_bound1,
+        lb2 = l_lower_bound2,
+        median = l_median,
+        ub2 = l_upper_bound2,
+        ub1 = l_upper_bound1))
+  }
+  
+  rownames(stats_out) <- NULL
+  assign(param_name, stats_out, envir = .GlobalEnv)
+}
+
+### Apply discount rate to MCS dataframe
+
+quick_discount <- function(param_name, df, dr, scenario_lifetime = scenario_years){
+  drvalues <- numeric(scenario_years) # an empty vector 'drvalues' is created to house the loop outputs
+  drvalues[1] <- 1          
+  for (n in 2:scenario_years) {
+    drvalues[n] <- (1+(dr/100))^(n-1) # drvalues is populated with the discount rate conversion factor for each year
+  }
+  drvalues_df <- data.frame(t(drvalues)) # make a dataframe out of the discount rate loop output
+  discount_df <- drvalues_df[rep(1, run_count),] # the discount rate vector is replicated into rows equal to the MCS run count
+  npv <- df/discount_df # the total annual cash flow is converted into NPV
+  colnames(npv) <- output_headers # make the column headers years
+  assign(param_name, npv, envir = .GlobalEnv)
+  assign("dr_out", drvalues_df, envir = .GlobalEnv)
+}
+
 
 ### Calculate CBA indicators (NPV, SROI, LCCA) at different discount rates
 

@@ -21,13 +21,15 @@ if (!require("data.table")) install.packages("data.table")
 library(data.table)
 if (!require("gridExtra")) install.packages("gridExtra")
 library(gridExtra)
+if (!require("patchwork")) install.packages("patchwork")
+library(patchwork)
 ```
 
 Set up global variables
 ```{r}
 # Define the following global variables to be called by parameter functions
-run_count <- 1000
-scenario_start <- 2026
+run_count <- 2000
+scenario_start <- 2025
 intv_years <- 10 # The number of years the intervention will be implemented
 intv_lifetime <- 15 # The number of years the intervention generates benefits, generally the expected lifetime of equipment
 scenario_end  <- scenario_start + intv_years + intv_lifetime - 1
@@ -71,7 +73,7 @@ assign_projecttype(intv_boundary_mgnl)
 
 ```
 
-Air source heat pumps (ASHP): Activity data, cost, and GHG simulations
+Air source heat pumps (ASHP): Activity data, cost, and ghg simulations
 ```{r}
 # Simulate annual electricity consumption for space heating and cooling. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
 calc_ad1("ashp_ref_ann_data1",
@@ -459,52 +461,231 @@ write_xlsx(summary_outputlist, path = "summary_output.xlsx")
 
 ```
 
-Plot: Electricity
+Figure 1: Energy use in reference & intervention scenarios
 ```{r}
-ref_kwh <- ashp_ref_data1[,-1] + weatherize_ref_data1[,-1] + hpwh_ref_data1[,-1]
-ref_kwh <- ref_kwh %>%
-    mutate(unit = "kWh") %>%
-    select(unit, everything())  
+# Electricity
 
-mcs_stats("ref_kWh_stats", ref_kwh, lower_bound = .25, upper_bound = .75)
+# Create dataframe with total mwh for each scenario
+ref_mwh <- ashp_ref_data1[,-1] + weatherize_ref_data1[,-1] + hpwh_ref_data1[,-1]
+ref_mwh <- ref_mwh / 1000
+intv_mwh <- ashp_intv_data1[,-1] + weatherize_intv_data1[,-1] + hpwh_intv_data1[,-1]
+intv_mwh <- intv_mwh / 1000
 
-ref_kWh_stats$year <- as.numeric(ref_kWh_stats$year) # need to convert year column to numeric
+mcs_stats_cumul("ref_mwh_stats", ref_mwh, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+mcs_stats_cumul("intv_mwh_stats", intv_mwh, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
 
-# GHG mitigation plot
-ggplot(ref_kWh_stats, aes(x = year, y = median)) +
-  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
-  geom_ribbon(aes(ymin = lb, ymax = ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
-  labs(title = "ref kwh",
+# Convert year column to numeric
+ref_mwh_stats$year <- as.numeric(ref_mwh_stats$year) 
+intv_mwh_stats$year <- as.numeric(intv_mwh_stats$year) 
+
+# Add an identifier column to each dataframe
+ref_mwh_stats$Scenario <- "Reference Scenario"
+intv_mwh_stats$Scenario <- "Intervention Scenario"
+
+mwhplot <- bind_rows(ref_mwh_stats, intv_mwh_stats)
+
+# mwh comparison plot
+p_mwh <- ggplot(mwhplot, aes(x = year, y = median, color = Scenario, fill = Scenario)) +
+  geom_line(size = .5) + 
+  geom_ribbon(aes(ymin = lb1, ymax = ub1), alpha = 0.25, color = NA) +
+  geom_ribbon(aes(ymin = lb2, ymax = ub2), alpha = 0.4, color = NA) +
+  labs(title = "a",
        x = "Year",
-       y = "kwh") +
-  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+       y = "Megawatt-hour") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 6)) +
   scale_x_continuous(
     breaks = seq(scenario_start, scenario_end, by = 5),
     labels = seq(scenario_start, scenario_end, by = 5)) +
+  theme_minimal() +
+  scale_color_manual(values = c("Reference Scenario" = "darkblue", "Intervention Scenario" = "darkgreen")) +
+  scale_fill_manual(values = c("Reference Scenario" = "darkblue", "Intervention Scenario" = "darkgreen")) +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 1)
+
+# Natural Gas
+
+# Create dataframe with total mmbtu for each scenario
+ref_mmbtu <- ashp_ref_data2[,-1] + weatherize_ref_data2[,-1] + hpwh_ref_data2[,-1]
+ref_mmbtu <- ref_mmbtu / 10
+intv_mmbtu <- ashp_intv_data2[,-1] + weatherize_intv_data2[,-1] + hpwh_intv_data2[,-1]
+intv_mmbtu <- intv_mmbtu / 10
+
+mcs_stats_cumul("ref_mmbtu_stats", ref_mmbtu, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+mcs_stats_cumul("intv_mmbtu_stats", intv_mmbtu, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+
+# Convert year column to numeric
+ref_mmbtu_stats$year <- as.numeric(ref_mmbtu_stats$year) 
+intv_mmbtu_stats$year <- as.numeric(intv_mmbtu_stats$year) 
+
+# Add an identifier column to each dataframe
+ref_mmbtu_stats$Scenario <- "Reference Scenario"
+intv_mmbtu_stats$Scenario <- "Intervention Scenario"
+
+mmbtuplot <- bind_rows(ref_mmbtu_stats, intv_mmbtu_stats)
+
+# mmbtu comparison plot
+p_mmbtu <- ggplot(mmbtuplot, aes(x = year, y = median, color = Scenario, fill = Scenario)) +
+  geom_line(size = .5) + 
+  geom_ribbon(aes(ymin = lb1, ymax = ub1), alpha = 0.25, color = NA) +
+  geom_ribbon(aes(ymin = lb2, ymax = ub2), alpha = 0.4, color = NA) +
+  labs(title = "b",
+       x = "Year",
+       y = "Million BTUs") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 6)) +
+  scale_x_continuous(
+    breaks = seq(scenario_start, scenario_end, by = 5),
+    labels = seq(scenario_start, scenario_end, by = 5)) +
+  theme_minimal() +
+  scale_color_manual(values = c("Reference Scenario" = "darkblue", "Intervention Scenario" = "darkgreen")) +
+  scale_fill_manual(values = c("Reference Scenario" = "darkblue", "Intervention Scenario" = "darkgreen")) +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 1)
+
+p1 <- p_mwh + p_mmbtu + plot_layout(guides = 'collect')
+
+ggsave("figures/fig1.png", plot = p1, dpi = 300)
+
+```
+
+Figure 2: Capex and Opex
+```{r}
+# Capex & opex cashflow
+
+quick_discount("capex3.5", cashflow_investment, dr = 3.5)
+quick_discount("opex3.5", cashflow_opex, dr = 3.5)
+
+mcs_stats_ann("capex3.5_stats", capex3.5, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+mcs_stats_ann("opex3.5_stats", opex3.5, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+
+# Convert year column to numeric
+capex3.5_stats$year <- as.numeric(capex3.5_stats$year) 
+opex3.5_stats$year <- as.numeric(opex3.5_stats$year) 
+
+# capex plot
+p_capex <- ggplot(capex3.5_stats, aes(x = year, y = median)) +
+  geom_line(aes(group = 1), color = "deepskyblue4", size = .5) +   
+  geom_ribbon(aes(ymin = lb1, ymax = ub1, group = 1), fill = "deepskyblue4", alpha = 0.25) + 
+  geom_ribbon(aes(ymin = lb2, ymax = ub2, group = 1), fill = "deepskyblue4", alpha = 0.4) +  
+  labs(title = "a",
+       x = "Year",
+       y = "Annual Capex\n(present value USD)") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 6)) +
+  scale_x_continuous(
+    breaks = seq(scenario_start, scenario_end, by = 10),
+    labels = seq(scenario_start, scenario_end, by = 10)) +
+  theme_minimal() +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 1)
+
+# opex plot
+p_opex <- ggplot(opex3.5_stats, aes(x = year, y = median)) +
+  geom_line(aes(group = 1), color = "palegreen4", size = .5) +   
+  geom_ribbon(aes(ymin = lb1, ymax = ub1, group = 1), fill = "palegreen4", alpha = 0.25) + 
+  geom_ribbon(aes(ymin = lb2, ymax = ub2, group = 1), fill = "palegreen4", alpha = 0.4) +  
+  labs(title = "b",
+       x = "Year",
+       y = "Annual Opex\n(present value USD)") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 6)) +
+  scale_x_continuous(
+    breaks = seq(scenario_start, scenario_end, by = 10),
+    labels = seq(scenario_start, scenario_end, by = 10)) +
+  theme_minimal() +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 1)
+
+# Economic cashflow plot 
+
+quick_discount("cashflow_econ3.5", cashflow_econ, dr = 3.5)
+mcs_stats_cumul("cashflow_stats", cashflow_econ3.5, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+
+# Convert year column to numeric
+cashflow_stats$year <- as.numeric(cashflow_stats$year) 
+
+# Plot
+p_cashflow <- ggplot(cashflow_stats, aes(x = year, y = median)) +
+  geom_line(aes(group = 1), color = "sienna", size = .5) +   
+  geom_ribbon(aes(ymin = lb1, ymax = ub1, group = 1), fill = "sienna", alpha = 0.25) + 
+  geom_ribbon(aes(ymin = lb2, ymax = ub2, group = 1), fill = "sienna", alpha = 0.4) +  
+  labs(title = "c",
+       x = "Year",
+       y = "Cumulative Cashflow\n(present value USD)") +
+  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 6)) +
+  scale_x_continuous(
+    breaks = seq(scenario_start, scenario_end, by = 10),
+    labels = seq(scenario_start, scenario_end, by = 10)) +
+  theme_minimal() +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = 1)
+
+p2 <- p_capex + p_opex + p_cashflow
+
+ggsave("figures/fig2.png", plot = p2, dpi = 300)
+
+```
+
+
+Figure 3: GHG Mitigation
+```{r}
+# GHG mitigation histogram
+cumul_sum1("ghg_cumul", ghg_mitigation)
+mcs_stats_cumul("ghg_stats", ghg_mitigation[, -1], lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+total_ghg_mit <- as.data.frame(ghg_cumul[,26]) 
+ghg_lb <- ghg_stats[26,3] 
+ghg_median <- ghg_stats[26,4]
+ghg_ub <- ghg_stats[26,5]
+ghg_bin <- (ghg_median - ghg_lb)/3
+
+ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
+  geom_histogram(binwidth = ghg_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
+  geom_vline(aes(xintercept = ghg_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
+  geom_vline(aes(xintercept = ghg_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
+  geom_vline(aes(xintercept = ghg_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
+  labs(title = "ghg", x = "Metric Tons CO2e", y = "Frequency") + 
+  #scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
   theme_minimal()
 
 ```
 
-Plot: GHG Mitigation
-```{r}
-mcs_stats("ghg_stats", ghg_mitigation, lower_bound = .25, upper_bound = .75)
-
-ghg_stats$year <- as.numeric(ghg_stats$year) # need to convert year column to numeric
-
-# GHG mitigation plot
-ggplot(ghg_stats, aes(x = year, y = ghg_median)) +
-  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
-  geom_ribbon(aes(ymin = ghg_lb, ymax = ghg_ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
-  labs(title = "GHG Mitigation",
-       x = "Year",
-       y = "Metric tons CO2e") +
-  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
-  scale_x_continuous(
-    breaks = seq(scenario_start, scenario_end, by = 5),
-    labels = seq(scenario_start, scenario_end, by = 5)) +
-  theme_minimal()
-
-```
 
 CBA Indicator calcs with discount rate range and Monte Carlo Simulation statistics
 ```{r}
@@ -516,7 +697,7 @@ cba_discountrange(dr_min = dr_lb, dr_max = dr_ub, scenario_lifetime = scenario_y
 
 # Calculates statistics for the Monte Carlo Simulation (lower bound, median, and upper bound)
 
-cba_mcs_stats(lower_bound = .25, upper_bound = .75)
+mcs_cba_stats(lower_bound = .25, upper_bound = .75)
 
 ```
 
@@ -551,7 +732,7 @@ ggplot(npv_social, aes(x = npv_social[,1])) +
   geom_vline(aes(xintercept = npv_social_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
   geom_vline(aes(xintercept = npv_social_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
   labs(title = "Histogram of Social NPV at r = 3.5, with median and 25-75% percentiles", x = "npv", y = "Frequency") +
-  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
+  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 5)) +
   theme_minimal()
 
 ```
