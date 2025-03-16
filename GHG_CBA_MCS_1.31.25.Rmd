@@ -23,6 +23,8 @@ if (!require("gridExtra")) install.packages("gridExtra")
 library(gridExtra)
 if (!require("patchwork")) install.packages("patchwork")
 library(patchwork)
+if (!require("tidyr")) install.packages("tidyr")
+library(tidyr)
 ```
 
 Set up global variables
@@ -51,7 +53,7 @@ write_xlsx(EFL, path = "EFLco2e.xlsx")
 Emission Factor Simulations
 ```{r}
 # Electricity emission factor
-scenario_MCS("ef_sim_electricity", sheet_name = "electricity_ef", units = "kgco2e/kWh") #write a custome function for electricity? with the starting value as a input? And NREL grid region as an input as well. 
+scenario_MCS("ef_sim_electricity", sheet_name = "electricity_ef", units = "kgco2e/kWh") #write a custom function for electricity? with the starting value as a input? And NREL grid region as an input as well. 
 
 # Supply Chain emission factor
 continuous_uniform2("ef_sim_appliances_upstream", minvalue = 0.079, maxvalue = 0.161, units = "kgco2e/USD")
@@ -670,24 +672,104 @@ Figure 3: GHG Mitigation
 cumul_sum1("ghg_cumul", ghg_mitigation)
 mcs_stats_cumul("ghg_stats", ghg_mitigation[, -1], lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
 total_ghg_mit <- as.data.frame(ghg_cumul[,26]) 
-ghg_lb <- ghg_stats[25,3] 
+ghg_lb1 <- ghg_stats[25,2]
+ghg_lb2 <- ghg_stats[25,3] 
 ghg_median <- ghg_stats[25,4]
-ghg_ub <- ghg_stats[25,5]
+ghg_ub2 <- ghg_stats[25,5]
+ghg_ub1 <- ghg_stats[25,6]
 ghg_bin <- (ghg_median - ghg_lb)/3
 
-ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
+p3 <- ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
   geom_histogram(binwidth = ghg_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
-  geom_vline(aes(xintercept = ghg_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = ghg_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
-  geom_vline(aes(xintercept = ghg_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "ghg", x = "Metric Tons CO2e", y = "Frequency") + 
+  geom_vline(aes(xintercept = ghg_median, color = "Median"), linetype = "dashed", size = 1) + 
+  geom_vline(aes(xintercept = ghg_lb1, color = "5%-95% Quantile Range"), linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = ghg_lb2, color = "25%-75% Quantile Range"), linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = ghg_ub2), color = "orange3", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = ghg_ub1), color = "darkgreen", linetype = "dashed", size = 1) +
+  labs(title = "GHG Mitigation Outcome", x = "Metric Tons CO2e", y = "Frequency") + 
   scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
-  theme_minimal()
+  theme_minimal() + 
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = .5,
+        legend.position = "right",  
+        legend.title = element_blank()) + 
+  scale_color_manual(name = NULL, 
+                     values = c("Median" = "darkblue",
+                                "25%-75% Quantile Range" = "orange3",
+                                "5%-95% Quantile Range" = "darkgreen"),
+                     breaks = c("Median", "25%-75% Quantile Range", "5%-95% Quantile Range"),
+                     guide = guide_legend(override.aes = list(linetype = 1)))
+
+ggsave("figures/fig3.png", plot = p3, dpi = 300)
+
+```
+
+Figure 4: Electricity EF
+```{r}
+# Electricity scenarios
+elec_ef_scenarios <- read_excel("scenarios.xlsx", sheet = "electricity_ef")
+fig4_trim <- cbind(elec_ef_scenarios[, 3], elec_ef_scenarios[, 9:34])
+fig4_data <- fig4_trim %>%
+  pivot_longer(cols = starts_with("20"), 
+               names_to = "year", 
+               values_to = "value")
+fig4_data$year <- as.numeric(fig4_data$year)
+colnames(fig4_data)[1] <- "scenario"
+
+p4_scenario_order <- c("Mid-case", 
+                    "Low Renewable Energy Costs", 
+                    "High Renewable Energy Costs", 
+                    "Low Natural Gas Prices", 
+                    "High Natural Gas Prices", 
+                    "High Demand Growth", 
+                    "95% Decarbonization by 2050", 
+                    "100% Decarbonization by 2035")
+
+p4_colors <- c(
+  "Mid-case" = "#1F77B4",  # Blue
+  "Low Renewable Energy Costs" = "#FF7F0E",  # Orange
+  "High Renewable Energy Costs" = "#2CA02C",  # Green
+  "Low Natural Gas Prices" = "#D62728",  # Red
+  "High Natural Gas Prices" = "#9467BD",  # Purple
+  "High Demand Growth" = "#8C564B",  # Brown
+  "95% Decarbonization by 2050" = "#E377C2",  # Light Purple
+  "100% Decarbonization by 2035" = "#7F7F7F"  # Gray
+)
+
+p4 <- ggplot(fig4_data, aes(x = year, y = value, color = scenario, group = scenario)) +
+  geom_line(size = 1) +
+  labs(title = NULL, 
+       x = "Year", y = "kgCO2e/kWh", color = "Scenario") +
+  scale_color_manual(
+    values = p4_colors,
+    breaks = p4_scenario_order) +
+  theme_minimal() +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = .5,
+        legend.position = "right")
+
+ggsave("figures/fig4.png", plot = p4, dpi = 300)
 
 ```
 
 
-CBA Indicator calcs with discount rate range and Monte Carlo Simulation statistics
+Figure 5: 6 panel CBA indicators
 ```{r}
 # Calculates three seperate tables of NPV for private, economic and social costs, using the range of discount rates provided
 dr_lb <- 1
