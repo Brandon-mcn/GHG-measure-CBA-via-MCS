@@ -698,19 +698,25 @@ cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = scenario_years
 
 ### Calculate Monte Carlo Simulation Statistics for CBA (lower bound, median, and upper bound)
 
-mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
+mcs_cba_stats <- function(lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95){
   # NPV MCS stats 
   npv_stats <- data.frame(
     dr = character(),
-    prv_lb = numeric(),
+    prv_lb1 = numeric(),
+    prv_lb2 = numeric(),
     prv_median = numeric(),
-    prv_ub = numeric(),
-    econ_lb = numeric(),
+    prv_ub2 = numeric(),
+    prv_ub1 = numeric(),
+    econ_lb1 = numeric(),
+    econ_lb2 = numeric(),
     econ_median = numeric(),
-    econ_ub = numeric(),
-    soc_ub = numeric(),
+    econ_ub2 = numeric(),
+    econ_ub1 = numeric(),
+    soc_lb1 = numeric(),
+    soc_lb2 = numeric(),
     soc_median = numeric(),
-    soc_lb = numeric(),
+    soc_ub2 = numeric(),
+    soc_ub1 = numeric(),
     stringsAsFactors = FALSE
   )
   loop_count = ncol(npv_econ_dr)
@@ -723,31 +729,43 @@ mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
     
     # Calculate statistics
     p_median <- median(p_values)        
-    p_lower_bound <- quantile(p_values, probs = lower_bound)
-    p_upper_bound <- quantile(p_values, probs = upper_bound)
+    p_lb1 <- quantile(p_values, probs = lower_bound_out)
+    p_lb2 <- quantile(p_values, probs = lower_bound_in)
+    p_ub1 <- quantile(p_values, probs = upper_bound_out)
+    p_ub2 <- quantile(p_values, probs = upper_bound_in)
     
     e_median <- median(e_values)        
-    e_lower_bound <- quantile(e_values, probs = lower_bound)
-    e_upper_bound <- quantile(e_values, probs = upper_bound)
+    e_lb1 <- quantile(e_values, probs = lower_bound_out)
+    e_lb2 <- quantile(e_values, probs = lower_bound_in)
+    e_ub1 <- quantile(e_values, probs = upper_bound_out)
+    e_ub2 <- quantile(e_values, probs = upper_bound_in)
     
     s_median <- median(s_values)        
-    s_lower_bound <- quantile(s_values, probs = lower_bound)
-    s_upper_bound <- quantile(s_values, probs = upper_bound)
+    s_lb1 <- quantile(s_values, probs = lower_bound_out)
+    s_lb2 <- quantile(s_values, probs = lower_bound_in)
+    s_ub1 <- quantile(s_values, probs = upper_bound_out)
+    s_ub2 <- quantile(s_values, probs = upper_bound_in)
     
     # Append results to the results dataframe
     npv_stats <- rbind(
       npv_stats,
       data.frame(
         dr = colnames(npv_econ_dr)[i],
-        prv_lb = p_lower_bound,
+        prv_lb1 = p_lb1,
+        prv_lb2 = p_lb2,
         prv_median = p_median,
-        prv_ub = p_upper_bound,
-        econ_lb = e_lower_bound,
+        prv_ub2 = p_ub2,
+        prv_ub1 = p_ub1,
+        econ_lb1 = e_lb1,
+        econ_lb2 = e_lb2,
         econ_median = e_median,
-        econ_ub = e_upper_bound,
-        soc_lb = s_lower_bound,
+        econ_ub2 = e_ub2,
+        econ_ub1 = e_ub1,
+        soc_lb1 = s_lb1,
+        soc_lb2 = s_lb2,
         soc_median = s_median,
-        soc_ub = s_upper_bound
+        soc_ub2 = s_ub2,
+        soc_ub1 = s_ub1
       )
     )
   }
@@ -757,15 +775,21 @@ mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
   # SROI MCS stats 
   sroi_stats <- data.frame(
     dr = character(),
-    prv_lb = numeric(),
+    prv_lb1 = numeric(),
+    prv_lb2 = numeric(),
     prv_median = numeric(),
-    prv_ub = numeric(),
-    econ_lb = numeric(),
+    prv_ub2 = numeric(),
+    prv_ub1 = numeric(),
+    econ_lb1 = numeric(),
+    econ_lb2 = numeric(),
     econ_median = numeric(),
-    econ_ub = numeric(),
-    soc_ub = numeric(),
+    econ_ub2 = numeric(),
+    econ_ub1 = numeric(),
+    soc_lb1 = numeric(),
+    soc_lb2 = numeric(),
     soc_median = numeric(),
-    soc_lb = numeric(),
+    soc_ub2 = numeric(),
+    soc_ub1 = numeric(),
     stringsAsFactors = FALSE
   )
   
@@ -777,31 +801,43 @@ mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
     
     # Calculate statistics
     p_median <- median(p_values)        
-    p_lower_bound <- quantile(p_values, probs = lower_bound)
-    p_upper_bound <- quantile(p_values, probs = upper_bound)
+    p_lb1 <- quantile(p_values, probs = lower_bound_out)
+    p_lb2 <- quantile(p_values, probs = lower_bound_in)
+    p_ub1 <- quantile(p_values, probs = upper_bound_out)
+    p_ub2 <- quantile(p_values, probs = upper_bound_in)
     
     e_median <- median(e_values)        
-    e_lower_bound <- quantile(e_values, probs = lower_bound)
-    e_upper_bound <- quantile(e_values, probs = upper_bound)
+    e_lb1 <- quantile(e_values, probs = lower_bound_out)
+    e_lb2 <- quantile(e_values, probs = lower_bound_in)
+    e_ub1 <- quantile(e_values, probs = upper_bound_out)
+    e_ub2 <- quantile(e_values, probs = upper_bound_in)
     
     s_median <- median(s_values)        
-    s_lower_bound <- quantile(s_values, probs = lower_bound)
-    s_upper_bound <- quantile(s_values, probs = upper_bound)
+    s_lb1 <- quantile(s_values, probs = lower_bound_out)
+    s_lb2 <- quantile(s_values, probs = lower_bound_in)
+    s_ub1 <- quantile(s_values, probs = upper_bound_out)
+    s_ub2 <- quantile(s_values, probs = upper_bound_in)
     
     # Append results to the results dataframe
     sroi_stats <- rbind(
       sroi_stats,
       data.frame(
-        dr = colnames(npv_econ_dr)[i],
-        prv_lb = p_lower_bound,
+        dr = colnames(sroi_econ_dr)[i],
+        prv_lb1 = p_lb1,
+        prv_lb2 = p_lb2,
         prv_median = p_median,
-        prv_ub = p_upper_bound,
-        econ_lb = e_lower_bound,
+        prv_ub2 = p_ub2,
+        prv_ub1 = p_ub1,
+        econ_lb1 = e_lb1,
+        econ_lb2 = e_lb2,
         econ_median = e_median,
-        econ_ub = e_upper_bound,
-        soc_lb = s_lower_bound,
+        econ_ub2 = e_ub2,
+        econ_ub1 = e_ub1,
+        soc_lb1 = s_lb1,
+        soc_lb2 = s_lb2,
         soc_median = s_median,
-        soc_ub = s_upper_bound
+        soc_ub2 = s_ub2,
+        soc_ub1 = s_ub1
       )
     )
   }
@@ -811,15 +847,21 @@ mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
   # LCCA MCS stats 
   lcca_stats <- data.frame(
     dr = character(),
-    prv_lb = numeric(),
+    prv_lb1 = numeric(),
+    prv_lb2 = numeric(),
     prv_median = numeric(),
-    prv_ub = numeric(),
-    econ_lb = numeric(),
+    prv_ub2 = numeric(),
+    prv_ub1 = numeric(),
+    econ_lb1 = numeric(),
+    econ_lb2 = numeric(),
     econ_median = numeric(),
-    econ_ub = numeric(),
-    soc_ub = numeric(),
+    econ_ub2 = numeric(),
+    econ_ub1 = numeric(),
+    soc_lb1 = numeric(),
+    soc_lb2 = numeric(),
     soc_median = numeric(),
-    soc_lb = numeric(),
+    soc_ub2 = numeric(),
+    soc_ub1 = numeric(),
     stringsAsFactors = FALSE
   )
  
@@ -831,31 +873,43 @@ mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
     
     # Calculate statistics
     p_median <- median(p_values)        
-    p_lower_bound <- quantile(p_values, probs = lower_bound)
-    p_upper_bound <- quantile(p_values, probs = upper_bound)
+    p_lb1 <- quantile(p_values, probs = lower_bound_out)
+    p_lb2 <- quantile(p_values, probs = lower_bound_in)
+    p_ub1 <- quantile(p_values, probs = upper_bound_out)
+    p_ub2 <- quantile(p_values, probs = upper_bound_in)
     
     e_median <- median(e_values)        
-    e_lower_bound <- quantile(e_values, probs = lower_bound)
-    e_upper_bound <- quantile(e_values, probs = upper_bound)
+    e_lb1 <- quantile(e_values, probs = lower_bound_out)
+    e_lb2 <- quantile(e_values, probs = lower_bound_in)
+    e_ub1 <- quantile(e_values, probs = upper_bound_out)
+    e_ub2 <- quantile(e_values, probs = upper_bound_in)
     
     s_median <- median(s_values)        
-    s_lower_bound <- quantile(s_values, probs = lower_bound)
-    s_upper_bound <- quantile(s_values, probs = upper_bound)
+    s_lb1 <- quantile(s_values, probs = lower_bound_out)
+    s_lb2 <- quantile(s_values, probs = lower_bound_in)
+    s_ub1 <- quantile(s_values, probs = upper_bound_out)
+    s_ub2 <- quantile(s_values, probs = upper_bound_in)
     
     # Append results to the results dataframe
     lcca_stats <- rbind(
       lcca_stats,
       data.frame(
-        dr = colnames(npv_econ_dr)[i],
-        prv_lb = p_lower_bound,
+        dr = colnames(lcca_econ_dr)[i],
+        prv_lb1 = p_lb1,
+        prv_lb2 = p_lb2,
         prv_median = p_median,
-        prv_ub = p_upper_bound,
-        econ_lb = e_lower_bound,
+        prv_ub2 = p_ub2,
+        prv_ub1 = p_ub1,
+        econ_lb1 = e_lb1,
+        econ_lb2 = e_lb2,
         econ_median = e_median,
-        econ_ub = e_upper_bound,
-        soc_lb = s_lower_bound,
+        econ_ub2 = e_ub2,
+        econ_ub1 = e_ub1,
+        soc_lb1 = s_lb1,
+        soc_lb2 = s_lb2,
         soc_median = s_median,
-        soc_ub = s_upper_bound
+        soc_ub2 = s_ub2,
+        soc_ub1 = s_ub1
       )
     )
   }
@@ -863,4 +917,61 @@ mcs_cba_stats <- function(lower_bound = 0.25, upper_bound = .75){
   assign("lcca_stats", lcca_stats, envir = .GlobalEnv)
 }
 
+### CBA Chart - economic value
+
+cba_econ_plot <- function(plot_name, df, c, ylab, panel){
+  plot <- ggplot(df, aes(x = dr, y = econ_median)) +
+    geom_line(aes(group = 1), color = c, size = .5) +   
+    geom_ribbon(aes(ymin = econ_lb1, ymax = econ_ub1, group = 1), fill = c, alpha = 0.25) + 
+    geom_ribbon(aes(ymin = econ_lb2, ymax = econ_ub2, group = 1), fill = c, alpha = 0.4) +  
+    labs(title = panel,
+         x = "r",
+         y = ylab) +
+    scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 8)) +
+    scale_x_continuous(
+      breaks = seq(dr_lb, dr_ub, by = 1),
+      labels = seq(dr_lb, dr_ub, by = 1)) +
+    theme_minimal() +
+    theme(text = element_text(size = 8, color = "black"),
+          plot.title = element_text(face = "bold", size = 12, color = "black"),
+          axis.text = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 8, color = "black"),
+          legend.text = element_text(size = 8, color = "black"),
+          axis.ticks = element_line(color = "black", size = .5),
+          axis.line = element_line(color = "black", size = .5),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          aspect.ratio = 1)
+  
+  assign(plot_name, plot, envir = .GlobalEnv)
+}
+
+### CBA Chart - social value
+
+cba_social_plot <- function(plot_name, df, c, ylab, panel){
+  plot <- ggplot(df, aes(x = dr, y = soc_median)) +
+    geom_line(aes(group = 1), color = c, size = .5) +   
+    geom_ribbon(aes(ymin = soc_lb1, ymax = soc_ub1, group = 1), fill = c, alpha = 0.25) + 
+    geom_ribbon(aes(ymin = soc_lb2, ymax = soc_ub2, group = 1), fill = c, alpha = 0.4) +  
+    labs(title = panel,
+         x = "r",
+         y = ylab) +
+    scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 8)) +
+    scale_x_continuous(
+      breaks = seq(dr_lb, dr_ub, by = 1),
+      labels = seq(dr_lb, dr_ub, by = 1)) +
+    theme_minimal() +
+    theme(text = element_text(size = 8, color = "black"),
+          plot.title = element_text(face = "bold", size = 12, color = "black"),
+          axis.text = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 8, color = "black"),
+          legend.text = element_text(size = 8, color = "black"),
+          axis.ticks = element_line(color = "black", size = .5),
+          axis.line = element_line(color = "black", size = .5),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          aspect.ratio = 1)
+  
+  assign(plot_name, plot, envir = .GlobalEnv)
+}
 

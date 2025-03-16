@@ -493,7 +493,7 @@ p_mwh <- ggplot(mwhplot, aes(x = year, y = median, color = Scenario, fill = Scen
   geom_ribbon(aes(ymin = lb2, ymax = ub2), alpha = 0.4, color = NA) +
   labs(title = "a",
        x = "Year",
-       y = "Megawatt-hour") +
+       y = "Megawatt-hours") +
   scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 6)) +
   scale_x_continuous(
     breaks = seq(scenario_start, scenario_end, by = 5),
@@ -561,7 +561,7 @@ p_mmbtu <- ggplot(mmbtuplot, aes(x = year, y = median, color = Scenario, fill = 
 
 p1 <- p_mwh + p_mmbtu + plot_layout(guides = 'collect')
 
-ggsave("figures/fig1.png", plot = p1, dpi = 300)
+ggsave("figures/fig1.png", plot = p1, width = 6.5, height = 2.5, dpi = 300)
 
 ```
 
@@ -661,7 +661,7 @@ p_cashflow <- ggplot(cashflow_stats, aes(x = year, y = median)) +
 
 p2 <- p_capex + p_opex + p_cashflow
 
-ggsave("figures/fig2.png", plot = p2, dpi = 300)
+ggsave("figures/fig2.png", plot = p2, width = 6.5, height = 2, dpi = 300)
 
 ```
 
@@ -686,7 +686,7 @@ p3 <- ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
   geom_vline(aes(xintercept = ghg_lb2, color = "25%-75% Quantile Range"), linetype = "dashed", size = 1) +
   geom_vline(aes(xintercept = ghg_ub2), color = "orange3", linetype = "dashed", size = 1) +
   geom_vline(aes(xintercept = ghg_ub1), color = "darkgreen", linetype = "dashed", size = 1) +
-  labs(title = "GHG Mitigation Outcome", x = "Metric Tons CO2e", y = "Frequency") + 
+  labs(title = NULL, x = "tco2e", y = "Frequency") + 
   scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
   theme_minimal() + 
   theme(text = element_text(size = 8, color = "black"),
@@ -708,7 +708,7 @@ p3 <- ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
                      breaks = c("Median", "25%-75% Quantile Range", "5%-95% Quantile Range"),
                      guide = guide_legend(override.aes = list(linetype = 1)))
 
-ggsave("figures/fig3.png", plot = p3, dpi = 300)
+ggsave("figures/fig3.png", plot = p3, width = 6.5, height = 3, dpi = 300)
 
 ```
 
@@ -747,7 +747,7 @@ p4_colors <- c(
 p4 <- ggplot(fig4_data, aes(x = year, y = value, color = scenario, group = scenario)) +
   geom_line(size = 1) +
   labs(title = NULL, 
-       x = "Year", y = "kgCO2e/kWh", color = "Scenario") +
+       x = "Year", y = "kgco2e/kWh", color = "Scenario") +
   scale_color_manual(
     values = p4_colors,
     breaks = p4_scenario_order) +
@@ -764,10 +764,9 @@ p4 <- ggplot(fig4_data, aes(x = year, y = value, color = scenario, group = scena
         aspect.ratio = .5,
         legend.position = "right")
 
-ggsave("figures/fig4.png", plot = p4, dpi = 300)
+ggsave("figures/fig4.png", plot = p4, width = 6.5, height = 2.5, dpi = 300)
 
 ```
-
 
 Figure 5: 6 panel CBA indicators
 ```{r}
@@ -779,7 +778,26 @@ cba_discountrange(dr_min = dr_lb, dr_max = dr_ub, scenario_lifetime = scenario_y
 
 # Calculates statistics for the Monte Carlo Simulation (lower bound, median, and upper bound)
 
-mcs_cba_stats(lower_bound = .25, upper_bound = .75)
+mcs_cba_stats(lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
+
+# need to convert discount rate column to numeric
+npv_stats$dr <- as.numeric(npv_stats$dr) 
+sroi_stats$dr <- as.numeric(sroi_stats$dr) 
+lcca_stats$dr <- as.numeric(lcca_stats$dr) 
+
+# Produce each panel
+
+cba_econ_plot("npv_econ_plot", npv_stats, c = "orangered4", ylab = "NPV (USD)", panel = "a")
+cba_social_plot("npv_social_plot", npv_stats, c = "orangered4", ylab = NULL, panel = "b")
+cba_econ_plot("sroi_econ_plot", sroi_stats, c = "deepskyblue4", ylab = "SROI (benefits:costs)", panel = "c")
+cba_social_plot("sroi_social_plot", sroi_stats, c = "deepskyblue4", ylab = NULL, panel = "d")
+cba_econ_plot("lcca_econ_plot", lcca_stats, c = "seagreen4", ylab = "LCCA (cost/tco2e)", panel = "e")
+cba_social_plot("lcca_social_plot", lcca_stats, c = "seagreen4", ylab = NULL, panel = "f")
+
+p5 <- npv_econ_plot + npv_social_plot + sroi_econ_plot + sroi_social_plot + lcca_econ_plot + lcca_social_plot + 
+  plot_layout(ncol = 2, nrow = 3)
+
+ggsave("figures/fig5.png", plot = p5, width = 6.5, height = 6.5, dpi = 300)
 
 ```
 
@@ -826,7 +844,7 @@ npv_stats$dr <- as.numeric(npv_stats$dr) # need to convert discount rate column 
 # Econ NPV plot
 ggplot(npv_stats, aes(x = dr, y = econ_median)) +
   geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
-  geom_ribbon(aes(ymin = econ_lb, ymax = econ_ub, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
+  geom_ribbon(aes(ymin = econ_lb1, ymax = econ_ub1, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
   labs(title = "NPV based on the discount rate, with 25% - 75% confidence range shaded",
        x = "Discount Rate",
        y = "NPV ($)") +
