@@ -919,13 +919,13 @@ mcs_cba_stats <- function(lower_bound_out = .05, lower_bound_in = .25, upper_bou
 
 ### CBA Chart - economic value
 
-cba_econ_plot <- function(plot_name, df, c, ylab, panel){
+cba_econ_plot <- function(plot_name, df, c, ylab, xlab, panel){
   plot <- ggplot(df, aes(x = dr, y = econ_median)) +
     geom_line(aes(group = 1), color = c, size = .5) +   
     geom_ribbon(aes(ymin = econ_lb1, ymax = econ_ub1, group = 1), fill = c, alpha = 0.25) + 
     geom_ribbon(aes(ymin = econ_lb2, ymax = econ_ub2, group = 1), fill = c, alpha = 0.4) +  
     labs(title = panel,
-         x = "r",
+         x = xlab,
          y = ylab) +
     scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 8)) +
     scale_x_continuous(
@@ -948,13 +948,13 @@ cba_econ_plot <- function(plot_name, df, c, ylab, panel){
 
 ### CBA Chart - social value
 
-cba_social_plot <- function(plot_name, df, c, ylab, panel){
+cba_social_plot <- function(plot_name, df, c, ylab, xlab, panel){
   plot <- ggplot(df, aes(x = dr, y = soc_median)) +
     geom_line(aes(group = 1), color = c, size = .5) +   
     geom_ribbon(aes(ymin = soc_lb1, ymax = soc_ub1, group = 1), fill = c, alpha = 0.25) + 
     geom_ribbon(aes(ymin = soc_lb2, ymax = soc_ub2, group = 1), fill = c, alpha = 0.4) +  
     labs(title = panel,
-         x = "r",
+         x = xlab,
          y = ylab) +
     scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 8)) +
     scale_x_continuous(

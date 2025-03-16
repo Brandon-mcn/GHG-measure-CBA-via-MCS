@@ -30,11 +30,11 @@ library(tidyr)
 Set up global variables
 ```{r}
 # Define the following global variables to be called by parameter functions
-run_count <- 2000
+run_count <- 10000
 scenario_start <- 2025
 intv_years <- 10 # The number of years the intervention will be implemented
 intv_lifetime <- 15 # The number of years the intervention generates benefits, generally the expected lifetime of equipment
-scenario_end  <- scenario_start + intv_years + intv_lifetime - 1
+scenario_end  <- scenario_start + intv_years + intv_lifetime - 2
 scenario_years <- scenario_end - scenario_start + 1
 output_headers <- scenario_start:scenario_end
 ```
@@ -671,13 +671,13 @@ Figure 3: GHG Mitigation
 # GHG mitigation histogram
 cumul_sum1("ghg_cumul", ghg_mitigation)
 mcs_stats_cumul("ghg_stats", ghg_mitigation[, -1], lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
-total_ghg_mit <- as.data.frame(ghg_cumul[,26]) 
-ghg_lb1 <- ghg_stats[25,2]
-ghg_lb2 <- ghg_stats[25,3] 
-ghg_median <- ghg_stats[25,4]
-ghg_ub2 <- ghg_stats[25,5]
-ghg_ub1 <- ghg_stats[25,6]
-ghg_bin <- (ghg_median - ghg_lb)/3
+total_ghg_mit <- as.data.frame(ghg_cumul[,(scenario_years + 1)]) 
+ghg_lb1 <- ghg_stats[scenario_years,2]
+ghg_lb2 <- ghg_stats[scenario_years,3] 
+ghg_median <- ghg_stats[scenario_years,4]
+ghg_ub2 <- ghg_stats[scenario_years,5]
+ghg_ub1 <- ghg_stats[scenario_years,6]
+ghg_bin <- (ghg_median - ghg_lb2)/3
 
 p3 <- ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
   geom_histogram(binwidth = ghg_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
@@ -787,96 +787,16 @@ lcca_stats$dr <- as.numeric(lcca_stats$dr)
 
 # Produce each panel
 
-cba_econ_plot("npv_econ_plot", npv_stats, c = "orangered4", ylab = "NPV (USD)", panel = "a")
-cba_social_plot("npv_social_plot", npv_stats, c = "orangered4", ylab = NULL, panel = "b")
-cba_econ_plot("sroi_econ_plot", sroi_stats, c = "deepskyblue4", ylab = "SROI (benefits:costs)", panel = "c")
-cba_social_plot("sroi_social_plot", sroi_stats, c = "deepskyblue4", ylab = NULL, panel = "d")
-cba_econ_plot("lcca_econ_plot", lcca_stats, c = "seagreen4", ylab = "LCCA (cost/tco2e)", panel = "e")
-cba_social_plot("lcca_social_plot", lcca_stats, c = "seagreen4", ylab = NULL, panel = "f")
+cba_econ_plot("npv_econ_plot", npv_stats, c = "orangered4", ylab = "NPV (USD)\n ", xlab = "r", panel = "a")
+cba_social_plot("npv_social_plot", npv_stats, c = "orangered4", ylab = NULL, xlab = "r", panel = "b")
+cba_econ_plot("sroi_econ_plot", sroi_stats, c = "deepskyblue4", ylab = "SROI (benefits:costs)\n ", xlab = "r", panel = "c")
+cba_social_plot("sroi_social_plot", sroi_stats, c = "deepskyblue4", ylab = NULL, xlab = "r", panel = "d")
+cba_econ_plot("lcca_econ_plot", lcca_stats, c = "seagreen4", ylab = "LCCA (cost/tco2e)\n ", xlab = "r\n \nEconomic Boundary", panel = "e")
+cba_social_plot("lcca_social_plot", lcca_stats, c = "seagreen4", ylab = NULL, xlab = "r\n \nSocial Boundary", panel = "f")
 
 p5 <- npv_econ_plot + npv_social_plot + sroi_econ_plot + sroi_social_plot + lcca_econ_plot + lcca_social_plot + 
   plot_layout(ncol = 2, nrow = 3)
 
 ggsave("figures/fig5.png", plot = p5, width = 6.5, height = 6.5, dpi = 300)
-
-```
-
-Plot: NPV Histograms
-```{r}
-# Histogram of Economic NPV with 3.5% discount rate
-npv_econ <- as.data.frame(npv_econ_dr[,26]) # the 26th row of npv_econ_dr corresponds with a 3% dr. Check npv_stats for column number = dr rate 
-npv_econ_lb <- npv_stats[26,5] # Row 26 corresponds to a 3.5 % dr. Column 5, 6, and 7 are the stats for economic npv
-npv_econ_median <- npv_stats[26,6]
-npv_econ_ub <- npv_stats[26,7]
-npv_econ_bin <- (npv_econ_median - npv_econ_lb)/3
-
-ggplot(npv_econ, aes(x = npv_econ[,1])) +
-  geom_histogram(binwidth = npv_econ_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
-  geom_vline(aes(xintercept = npv_econ_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = npv_econ_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
-  geom_vline(aes(xintercept = npv_econ_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "Histogram of Economic NPV at r = 3.5, with median and 25-75% percentiles", x = "npv", y = "Frequency") + 
-  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
-  theme_minimal()
-
-# Histogram of Social NPV with 3% discount rate
-npv_social <- as.data.frame(npv_social_dr[,26]) # the 26th row of npv_social_dr corresponds with a 3% dr. Check npv_stats for column number = dr rate 
-npv_social_lb <- npv_stats[26,8] # Row 26 corresponds to a 3.5 % dr. Column 5, 6, and 7 are the stats for social npv
-npv_social_median <- npv_stats[26,9]
-npv_social_ub <- npv_stats[26,10]
-npv_social_bin <- (npv_social_median - npv_social_lb)/3
-
-ggplot(npv_social, aes(x = npv_social[,1])) +
-  geom_histogram(binwidth = npv_social_bin, fill = "darkgrey", color = "black", alpha = 0.7) +
-  geom_vline(aes(xintercept = npv_social_median), color = "darkblue", linetype = "dashed", size = 1) +  # median line
-  geom_vline(aes(xintercept = npv_social_lb), color = "darkgreen", linetype = "dotted", size = 1) +  # lower bound
-  geom_vline(aes(xintercept = npv_social_ub), color = "darkgreen", linetype = "dotted", size = 1) +  # upper bound
-  labs(title = "Histogram of Social NPV at r = 3.5, with median and 25-75% percentiles", x = "npv", y = "Frequency") +
-  scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 5)) +
-  theme_minimal()
-
-```
-Plot: NPV Based on discount rate
-```{r, eval = FALSE}
-
-npv_stats$dr <- as.numeric(npv_stats$dr) # need to convert discount rate column to numeric
-
-# Econ NPV plot
-ggplot(npv_stats, aes(x = dr, y = econ_median)) +
-  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
-  geom_ribbon(aes(ymin = econ_lb1, ymax = econ_ub1, group = 1), fill = "darkgreen", alpha = 0.5) +  # Shaded confidence interval
-  labs(title = "NPV based on the discount rate, with 25% - 75% confidence range shaded",
-       x = "Discount Rate",
-       y = "NPV ($)") +
-  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
-  scale_x_continuous(
-    breaks = seq(dr_lb, dr_ub, by = 1),
-    labels = seq(dr_lb, dr_ub, by = 1)) +
-  theme_minimal()
-
-# Social NPV plot
-ggplot(npv_stats, aes(x = dr, y = soc_median)) +
-  geom_line(aes(group = 1), color = "black", size = 1) +    # Line for the mean
-  geom_ribbon(aes(ymin = soc_lb, ymax = soc_ub, group = 1), fill = "darkblue", alpha = 0.5) +  # Shaded confidence interval
-  labs(title = "NPV based on the discount rate, with 25% - 75% confidence range shaded",
-       x = "Discount Rate",
-       y = "NPV ($)") +
-  scale_y_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
-  scale_x_continuous(
-    breaks = seq(dr_lb, dr_ub, by = 1),
-    labels = seq(dr_lb, dr_ub, by = 1)) +
-  theme_minimal()
-```
-
-Plot: SROI 
-```{r}
-
-
-```
-
-
-Plot: LCCA 
-```{r}
-
 
 ```
