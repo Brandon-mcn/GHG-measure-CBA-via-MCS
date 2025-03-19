@@ -580,7 +580,7 @@ quick_discount <- function(param_name, df, dr, scenario_lifetime = scenario_year
 
 ### Calculate CBA indicators (NPV, SROI, LCCA) at different discount rates
 
-cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = scenario_years){
+cba_discountrange <- function(dr_min, dr_max, annual_coben, scenario_lifetime = scenario_years){
   # Set discount rate variables
   drmin_loop = dr_min*10
   drmax_loop = dr_max*10
@@ -606,7 +606,7 @@ cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = scenario_years
     
     annual_npv_private <- cashflow_private/discount_df # the total annual cash flow is converted into NPV
     annual_npv_econ <- cashflow_econ/discount_df
-    annual_npv_social <- annual_npv_econ + coben_value_trim # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
+    annual_npv_social <- annual_npv_econ + annual_coben # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
     
     npv_private_cumsum <- as.data.frame(t(apply(annual_npv_private, 1, cumsum))) # net present value is summed cumulatively for each year
     npv_econ_cumsum <- as.data.frame(t(apply(annual_npv_econ, 1, cumsum)))
@@ -646,7 +646,7 @@ cba_discountrange <- function(dr_min, dr_max, scenario_lifetime = scenario_years
     
     annual_beni_private <- cashflow_opex/discount_df # opex is treated as the flow of economic benefits in this case
     annual_beni_econ <- cashflow_opex/discount_df
-    annual_beni_social <- annual_beni_econ + coben_value_trim # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
+    annual_beni_social <- annual_beni_econ + annual_coben # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
     
     annual_capex_private <- (cashflow_investment*-1)/discount_df # capex is converted to a positive number and adjusted for the discount rate
     annual_capex_econ <- (cashflow_investment*-1)/discount_df 
