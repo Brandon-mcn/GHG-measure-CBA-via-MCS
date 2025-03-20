@@ -150,6 +150,8 @@ ashp_intv_ghg_total <- ashp_intv_ghg_natgas[, -1] + ashp_intv_ghg_elec[, -1] + a
 
 Weatherization: Activity data, cost, and GHG simulations
 ```{r}
+# WorK TO DO
+
 # Simulate annual electricity consumption for space heating and cooling. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
 calc_ad1("weatherize_ref_ann_data1",
          "weatherize_intv_ann_data1",
