@@ -25,12 +25,14 @@ if (!require("gridExtra")) install.packages("gridExtra")
 library(gridExtra)
 if (!require("patchwork")) install.packages("patchwork")
 library(patchwork)
+if (!require("boot")) install.packages("boot")
+library(boot)
 ```
 
 Set up global variables
 ```{r}
 # Define the following global variables to be called by parameter functions
-run_count <- 1000
+run_count <- 10000
 scenario_start <- 2025
 intv_years <- 10 # The number of years the intervention will be implemented
 intv_lifetime <- 15 # The number of years the intervention generates benefits, generally the expected lifetime of equipment
@@ -408,6 +410,8 @@ p2 <- ggplot(fig2_data, aes(x = year, y = value, color = scenario, group = scena
         plot.title = element_text(face = "bold", size = 12, color = "black"),
         axis.text = element_text(size = 8, color = "black"),
         axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
         legend.text = element_text(size = 8, color = "black"),
         axis.ticks = element_line(color = "black", linewidth = .5),
         axis.line = element_line(color = "black", linewidth = .5),
@@ -462,6 +466,8 @@ p_mwh <- ggplot(mwhplot, aes(x = year, y = median, color = Scenario, fill = Scen
         plot.title = element_text(face = "bold", size = 12, color = "black"),
         axis.text = element_text(size = 8, color = "black"),
         axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
         legend.text = element_text(size = 8, color = "black"),
         axis.ticks = element_line(color = "black", linewidth = .5),
         axis.line = element_line(color = "black", linewidth = .5),
@@ -509,6 +515,8 @@ p_mmbtu <- ggplot(mmbtuplot, aes(x = year, y = median, color = Scenario, fill = 
         plot.title = element_text(face = "bold", size = 12, color = "black"),
         axis.text = element_text(size = 8, color = "black"),
         axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
         legend.text = element_text(size = 8, color = "black"),
         axis.ticks = element_line(color = "black", linewidth = .5),
         axis.line = element_line(color = "black", linewidth = .5),
@@ -542,13 +550,15 @@ p4 <- ggplot(total_ghg_mit, aes(x = total_ghg_mit[,1])) +
   geom_vline(aes(xintercept = ghg_lb2, color = "25%-75% Percentile Range"), linetype = "dashed", size = .75) +
   geom_vline(aes(xintercept = ghg_ub2), color = "palegreen4", linetype = "dashed", size = .75) +
   geom_vline(aes(xintercept = ghg_ub1), color = "orangered4", linetype = "dotted", size = .75) +
-  labs(title = NULL, x = "tCO2e", y = "Frequency") + 
+  labs(title = NULL, x = "tco2e", y = "Frequency") + 
   scale_x_continuous(labels = comma, breaks = scales::breaks_extended(n = 10)) +
   theme_minimal() + 
   theme(text = element_text(size = 8, color = "black"),
         plot.title = element_text(face = "bold", size = 12, color = "black"),
         axis.text = element_text(size = 8, color = "black"),
         axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
         legend.text = element_text(size = 8, color = "black"),
         axis.ticks = element_line(color = "black", size = .5),
         axis.line = element_line(color = "black", size = .5),
@@ -568,7 +578,84 @@ ggsave("figures/fig4.png", plot = p4, width = 6.5, height = 3, dpi = 300)
 
 ```
 
-Figure 5: Capex and Opex
+Figure 5: GHG Sensitivity analysis
+```{r}
+# GHG mitigation
+src_ghg <- data.frame(p_count =  rowSums(intv_boundary_mgnl[, -1]),
+                      ref_mwh = rowSums(ref_mwh),
+                      ref_mmbtu = rowSums(ref_mmbtu),
+                      ashp_savings = ashp_intv_factor[, 2],
+                      weatherize_savings = weatherize_intv_factor[, 2],
+                      hpwh_savings = hpwh_intv_factor[, 2],
+                      kwh_ef = rowMeans(ef_sim_electricity[, -1]),
+                      ghg_mit = rowSums(ghg_mitigation[, -1]))
+
+inputs <- src_ghg[, 1:(ncol(src_ghg) - 1)]  # Model parameters (adjust column range)
+output <- src_ghg[, ncol(src_ghg)]   # The final column is the emissions reduction result
+
+# Fit a linear regression model using inputs to predict the output
+lm_model <- lm(output ~ ., data = inputs)
+
+# Standardize the entire dataframe (excluding output)
+df_standardized <- src_ghg  
+df_standardized[, -ncol(df_standardized)] <- scale(src_ghg[, -ncol(src_ghg)])
+
+# Fit the model on the standardized dataframe
+lm_standardized <- lm(scale(output) ~ ., data = df_standardized[, -ncol(df_standardized)])
+
+# Get standardized coefficients (excluding intercept)
+standardized_coefs <- coef(lm_standardized)[-1]  
+
+# Step 3: Calculate confidence intervals for unstandardized model
+ci_unstandardized <- confint(lm_model)
+
+# Extract standard deviation of predictors and response
+sd_x <- apply(src_ghg[, -ncol(src_ghg)], 2, sd)  # Standard deviation of predictors
+sd_y <- sd(src_ghg$ghg_mit)  # Standard deviation of response
+
+# Convert confidence intervals to standardized scale
+ci_standardized <- ci_unstandardized[-1, ] * (sd_x / sd_y)  # Exclude intercept
+
+# Step 4: Combine results into a data frame
+src_df <- data.frame(
+  Variable = names(standardized_coefs),
+  Coefficient = standardized_coefs,
+  CI_Low = ci_standardized[, 1],
+  CI_High = ci_standardized[, 2])
+
+p5 <- ggplot(src_df, aes(x = reorder(Variable, Coefficient), y = Coefficient)) +
+  geom_point(shape = 18, size = 3, color = "deepskyblue4") +
+  geom_errorbar(aes(ymin = CI_Low, ymax = CI_High), width = 0.2, color = "black") +
+  coord_flip() +  # Flip to horizontal view
+  labs(title = NULL,
+       x = "Model Parameters",
+       y = "Standardized Coefficient") +
+  theme_minimal() +
+  scale_x_discrete(labels = c("p_count" = "Project count",
+                              "ref_mwh" = "Reference kWh\ndemand",
+                              "ref_mmbtu" = "Reference therms\ndemand",
+                              "ashp_savings" = "Air source heat\npump savings",
+                              "weatherize_savings" = "Weatherization\nsavings",
+                              "hpwh_savings" = "Heat pump water\nheater savings",
+                              "kwh_ef" = "Electricity\nemission factor")) +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = .5)
+
+ggsave("figures/fig5.png", plot = p5, width = 6.5, height = 3, dpi = 300)
+
+```
+
+
+Figure 6: Capex and Opex
 ```{r}
 # Capex & opex cashflow
 quick_discount("capex3.5", "3.5_dr_out", cashflow_investment, dr = 3.5)
@@ -605,6 +692,8 @@ p_capex <- ggplot(capex3.5_stats, aes(x = year, y = median)) +
         plot.title = element_text(face = "bold", size = 12, color = "black"),
         axis.text = element_text(size = 8, color = "black"),
         axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
         legend.text = element_text(size = 8, color = "black"),
         axis.ticks = element_line(color = "black", size = .5),
         axis.line = element_line(color = "black", size = .5),
@@ -629,6 +718,8 @@ p_opex <- ggplot(opex3.5_stats, aes(x = year, y = median)) +
         plot.title = element_text(face = "bold", size = 12, color = "black"),
         axis.text = element_text(size = 8, color = "black"),
         axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
         legend.text = element_text(size = 8, color = "black"),
         axis.ticks = element_line(color = "black", size = .5),
         axis.line = element_line(color = "black", size = .5),
@@ -665,6 +756,8 @@ p_cashflow <- ggplot(cashflow_stats, aes(x = year, y = median)) +
         plot.title = element_text(face = "bold", size = 12, color = "black"),
         axis.text = element_text(size = 8, color = "black"),
         axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
         legend.text = element_text(size = 8, color = "black"),
         axis.ticks = element_line(color = "black", size = .5),
         axis.line = element_line(color = "black", size = .5),
@@ -672,13 +765,13 @@ p_cashflow <- ggplot(cashflow_stats, aes(x = year, y = median)) +
         panel.grid.minor = element_blank(),
         aspect.ratio = 1)
 
-p5 <- p_capex + p_opex + p_cashflow
+p6 <- p_capex + p_opex + p_cashflow
 
-ggsave("figures/fig5.png", plot = p5, width = 6.5, height = 2, dpi = 300)
+ggsave("figures/fig6.png", plot = p6, width = 6.5, height = 2, dpi = 300)
 
 ```
 
-Figure 6: 6 panel CBA indicators
+Figure 7: 6 panel CBA indicators
 ```{r}
 # Calculates three seperate tables of NPV for private, economic and social costs, using the range of discount rates provided
 dr_lb <- 1
@@ -701,78 +794,123 @@ npv_stats <- npv_stats %>%
 
 # Produce each panel
 
-cba_econ_plot("npv_econ_plot", npv_stats, c = "deepskyblue4", ylab = "NPV ($1,000 USD)\n ", xlab = expression("r"[e]), panel = "a")
-cba_social_plot("npv_social_plot", npv_stats, c = "deepskyblue4", ylab = NULL, xlab = expression("r"[e]), panel = "b")
-cba_econ_plot("sroi_econ_plot", sroi_stats, c = "palegreen4", ylab = "SROI (benefits:costs)\n ", xlab = expression("r"[e]), panel = "c")
-cba_social_plot("sroi_social_plot", sroi_stats, c = "palegreen4", ylab = NULL, xlab = expression("r"[e]), panel = "d")
-cba_econ_plot("lcca_econ_plot", lcca_stats, c = "orangered4", ylab = "LCCA (USD/tCO2e)\n ", xlab = expression(atop("r"[e], "\nEconomic Boundary")), panel = "e")
-cba_social_plot("lcca_social_plot", lcca_stats, c = "orangered4", ylab = NULL, xlab = expression(atop("r"[e], "\nSocial Boundary")), panel = "f")
+cba_econ_plot("npv_econ_plot", npv_stats, c = "deepskyblue4", ylab = "Economic Boundary\n \nNPV ($1,000 USD)", xlab = NULL, panel = "a")
+cba_social_plot("npv_social_plot", npv_stats, c = "deepskyblue4", ylab = "Social Boundary\n \nNPV ($1,000 USD)", xlab = expression("r"[e]), panel = "d")
+cba_econ_plot("sroi_econ_plot", sroi_stats, c = "palegreen4", ylab = "SROI (benefits:costs)", xlab = NULL, panel = "b")
+cba_social_plot("sroi_social_plot", sroi_stats, c = "palegreen4", ylab = "SROI (benefits:costs)", xlab = expression("r"[e]), panel = "e")
+cba_econ_plot("lcca_econ_plot", lcca_stats, c = "orangered4", ylab = "LCCA (USD/tco2e)", xlab = NULL, panel = "c")
+cba_social_plot("lcca_social_plot", lcca_stats, c = "orangered4", ylab = "LCCA (USD/tco2e)", xlab = expression("r"[e]), panel = "f")
 
-p6 <- npv_econ_plot + npv_social_plot + sroi_econ_plot + sroi_social_plot + lcca_econ_plot + lcca_social_plot + 
-  plot_layout(ncol = 2, nrow = 3)
+p7 <- npv_econ_plot + sroi_econ_plot + lcca_econ_plot + npv_social_plot + sroi_social_plot + lcca_social_plot + 
+  plot_layout(ncol = 3, nrow = 2)
 
-ggsave("figures/fig6.png", plot = p6, width = 6.5, height = 6.5, dpi = 300)
+ggsave("figures/fig7.png", plot = p7, width = 6.5, height = 4.8, dpi = 300)
 
 ```
 
-Sensitivity analysis
+Extra figure: CBA Sensitivity analysis
 ```{r}
 # GHG mitigation
-sens_ghg <- data.frame(p_count =  rowSums(intv_boundary_mgnl[,-1]),
-                       ref_mwh = rowSums(ref_mwh),
-                       ref_mmbtu = rowSums(ref_mmbtu),
-                       ashp_savings = ashp_intv_factor[, 2],
-                       weatherize_savings = weatherize_intv_factor[, 2],
-                       hpwh_savings = hpwh_intv_factor[, 2],
-                       ghg_mit = unname(ghg_mit))
+dr_count = dr_ub*10 - dr_lb*10 + 1
+npv_long <- npv_econ_dr %>%
+  pivot_longer(cols = everything(), 
+               names_to = "dr",
+               values_to = "NPV")
+ghg_mit_long <- data.frame(rep(rowSums(ghg_mitigation[, -1]), times = dr_count))
+capex_long <- data.frame(rep(rowSums(cashflow_investment[, -1]), times = dr_count))
+opex_long <- data.frame(rep(rowSums(cashflow_opex[, -1]), times = dr_count))
 
-inputs <- sens_ghg[, 1:(ncol(sens_ghg) - 1)]  # Model parameters (adjust column range)
-output <- sens_ghg[, ncol(sens_ghg)]   # The final column is the emissions reduction result
+src_npv <- data.frame(ghg_mit = unname(ghg_mit_long),
+                      capex = unname(capex_long),
+                      opex = unname(opex_long),
+                      dr = unname(npv_long$dr),
+                      npv = unname(npv_long$NPV))
 
-# Load necessary package for Standardized Regression Coefficients (SRC)
-library(boot)
+src_npv$dr <- as.numeric(src_npv$dr)
+
+inputs2 <- src_npv[, 1:(ncol(src_npv) - 1)]  # Model parameters (adjust column range)
+output2 <- src_npv[, ncol(src_npv)]   # The final column is the emissions reduction result
 
 # Fit a linear regression model using inputs to predict the output
-lm_model <- lm(output ~ ., data = inputs)
+lm_model2 <- lm(output2 ~ ., data = inputs2)
 
-# Compute standardized regression coefficients (SRC)
-src_values <- coef(lm_model)[-1] * apply(inputs, 2, sd) / sd(output)
+# Standardize the entire dataframe (excluding output)
+df_standardized2 <- src_npv  
+df_standardized2[, -ncol(df_standardized2)] <- scale(src_npv[, -ncol(src_npv)])
 
-# Rank variables by absolute SRC value
-ranked_src <- sort(abs(src_values), decreasing = TRUE)
+# Fit the model on the standardized dataframe
+lm_standardized2 <- lm(scale(output2) ~ ., data = df_standardized2[, -ncol(df_standardized2)])
 
-# Print ranked variables
-print(ranked_src)
+# Get standardized coefficients (excluding intercept)
+standardized_coefs2 <- coef(lm_standardized2)[-1]  
 
-# Convert SRC results into a data frame
-src_df <- data.frame(Variable = names(ranked_src), SRC = ranked_src)
+# Step 3: Calculate confidence intervals for unstandardized model
+ci_unstandardized2 <- confint(lm_model2)
 
-ggplot(src_df, aes(x = reorder(Variable, SRC), y = SRC)) +
-  geom_segment(aes(xend = Variable, yend = 0), color = "gray") +  # Line from y = 0 to y = SRC
-  geom_point(size = 4, color = "blue") +  # Point at the end of the line
-  coord_flip() +  # Flip to horizontal layout
-  labs(title = "Variable Importance (SRC)", x = "Variable", y = "SRC Value") +
-  theme_minimal()
+# Extract standard deviation of predictors and response
+sd_x2 <- apply(src_npv[, -ncol(src_npv)], 2, sd)  # Standard deviation of predictors
+sd_y2 <- sd(src_npv$npv)  # Standard deviation of response
 
+# Convert confidence intervals to standardized scale
+ci_standardized2 <- ci_unstandardized2[-1, ] * (sd_x2 / sd_y2)  # Exclude intercept
+
+# Step 4: Combine results into a data frame
+src_df2 <- data.frame(
+  Variable = names(standardized_coefs2),
+  Coefficient = standardized_coefs2,
+  CI_Low = ci_standardized2[, 1],
+  CI_High = ci_standardized2[, 2])
+
+p8 <- ggplot(src_df2, aes(x = reorder(Variable, Coefficient), y = Coefficient)) +
+  geom_point(shape = 17, size = 2, color = "deepskyblue4") +
+  geom_errorbar(aes(ymin = CI_Low, ymax = CI_High), width = 0.2, color = "black") +
+  coord_flip() +  # Flip to horizontal view
+  labs(title = NULL,
+       x = "Model Parameters",
+       y = "Standardized Coefficient") +
+  theme_minimal() +
+  scale_x_discrete(labels = c("ghg_mit" = "Mitigation outcome",
+                              "capex" = "Capex",
+                              "opex" = "Opex",
+                              "dr" = "Economic discount rate")) +
+  theme(text = element_text(size = 8, color = "black"),
+        plot.title = element_text(face = "bold", size = 12, color = "black"),
+        axis.text = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(margin = margin(t = 5)),  
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.ticks = element_line(color = "black", size = .5),
+        axis.line = element_line(color = "black", size = .5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        aspect.ratio = .5)
 
 ```
 
 Results calcs
 ```{r}
 # MWh savings
-
 mwh_savings <- ref_mwh - intv_mwh
+mwh_savings <- mwh_savings %>%
+    mutate(unit = "mWh") %>%
+    select(unit, everything())
 mcs_stats_cumul("mwhsavings_stats", mwh_savings, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
 mwhsavings_stats[24,1:6]
 
 # MMBTU savings
 
 mmbtu_savings <- ref_mmbtu - intv_mmbtu
+mmbtu_savings <- mmbtu_savings %>%
+    mutate(unit = "mmbtu") %>%
+    select(unit, everything())
 mcs_stats_cumul("mmbtusavings_stats", mmbtu_savings, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
 mmbtusavings_stats[24,1:6]
 
 # Upstream GHG emissions
 ghg_upstream <- (ashp_intv_ghg_upstream[, -1] + weatherize_intv_ghg_upstream[, -1] + hpwh_intv_ghg_upstream[, -1])/1000
+ghg_upstream <- ghg_upstream %>%
+    mutate(unit = "tco2e") %>%
+    select(unit, everything())
 mcs_stats_cumul("ghg_upstreamstats", ghg_upstream, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
 ghg_upstreamstats[24,1:6]
 
@@ -788,6 +926,9 @@ ref_ghg_s1n2total <- ashp_ref_ghgsum + weatherize_ref_ghgsum + hpwh_ref_ghgsum
 intv_ghg_s1n2total <- ashp_intv_ghgsum + weatherize_intv_ghgsum + hpwh_intv_ghgsum
 
 ghg_scope1n2 <- (ref_ghg_s1n2total - intv_ghg_s1n2total)/1000
+ghg_scope1n2 <- ghg_scope1n2 %>%
+    mutate(unit = "tco2e") %>%
+    select(unit, everything())
 mcs_stats_cumul("ghg_scope1n2stats", ghg_scope1n2, lower_bound_out = .05, lower_bound_in = .25, upper_bound_in = .75, upper_bound_out = .95)
 ghg_scope1n2stats[24,1:6]
 
@@ -812,9 +953,9 @@ ashp_outputlist <- (list("ashp_boundary_mgnl" = ashp_boundary_mgnl,
                          "ashp_ref_opex2" = ashp_ref_opex2,
                          "ashp_ref_capexsum" = ashp_ref_capexsum,
                          "ashp_ref_opexsum" = ashp_ref_opexsum,
+                         "ashp_intv_factor" = ashp_intv_factor,
                          "ashp_intv_ann_data1" = ashp_intv_ann_data1,
                          "ashp_intv_ann_data2" = ashp_intv_ann_data2,
-                         "ashp_intv_factor" = ashp_intv_factor, #new
                          "ashp_intv_data1" = ashp_intv_data1,
                          "ashp_intv_data2" = ashp_intv_data2,
                          "ashp_intv_ghg_elec" = ashp_intv_ghg_elec,
@@ -842,6 +983,7 @@ weatherize_outputlist <- (list("weatherize_boundary_mgnl" = weatherize_boundary_
                          "weatherize_ref_opex2" = weatherize_ref_opex2,
                          "weatherize_ref_capexsum" = weatherize_ref_capexsum,
                          "weatherize_ref_opexsum" = weatherize_ref_opexsum,
+                         "weatherize_intv_factor" = weatherize_intv_factor,
                          "weatherize_intv_ann_data1" = weatherize_intv_ann_data1,
                          "weatherize_intv_ann_data2" = weatherize_intv_ann_data2,
                          "weatherize_intv_data1" = weatherize_intv_data1,
@@ -871,6 +1013,7 @@ hpwh_outputlist <- (list("hpwh_boundary_mgnl" = hpwh_boundary_mgnl,
                          "hpwh_ref_opex2" = hpwh_ref_opex2,
                          "hpwh_ref_capexsum" = hpwh_ref_capexsum,
                          "hpwh_ref_opexsum" = hpwh_ref_opexsum,
+                         "hpwh_intv_factor" = hpwh_intv_factor,
                          "hpwh_intv_ann_data1" = hpwh_intv_ann_data1,
                          "hpwh_intv_ann_data2" = hpwh_intv_ann_data2,
                          "hpwh_intv_data1" = hpwh_intv_data1,
@@ -892,7 +1035,7 @@ summary_outputlist <- (list("cashflow_investment" = cashflow_investment,
                          "cashflow_econ" = cashflow_econ,
                          "cashflow_social" = cashflow_social,
                          "coben1_sim" = coben1_sim,
-                         "coben1_value" = coben1_value,
+                         "coben_value" = coben_value,
                          "ghg_mitigation" = ghg_mitigation,
                          "intv_boundary_mgnl" = intv_boundary_mgnl,
                          "intv_capexsum" = intv_capexsum,
