@@ -190,64 +190,9 @@ scenario_MCS <- function(param_name, sheet_name, units){
   colnames(mcs_out) <- colfilter
   mcs_out <- mcs_out %>% select(-scenario_prob)
   mcs_out <- mcs_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(param_name, mcs_out, envir = .GlobalEnv)
-}
-
-### Activity data calculation 1 - Reference scenario is a baseline, intervention is a % reduction from the baseline. Each intervention instance is simulated
-
-calc_ad1 <- function(ref_name, intv_name, boundary_df, ref_pdf, ref_params, intv_pdf, intv_params, units){
-  #initiate empty dataframe 
-  ref_out <- matrix(0, nrow = run_count, ncol = scenario_years)
-  intv_out <- matrix(0, nrow = run_count, ncol = scenario_years)
-  
-  for (i in 1:run_count) {
-    for (j in 1:scenario_years) {
-      n <- boundary_df[i, (j+1)] # Because the boundary data has a leading unit column, j is shifted over by 1
-      
-      # Simulate reference and intervention scenarios for each intervention instance
-      ref_sim <- do.call(ref_pdf, c(list(n), ref_params)) # Simulate activity data for each instance
-      intv_factors <- do.call(intv_pdf, c(list(n), intv_params)) # Simulate the activity reduction factor for each instance
-      intv_savings <- 1-intv_factors # inverse of intv_factor
-      intv_sim <- ref_sim * intv_savings # calculate intervention activity data for each instance
-      
-      # Sum the total activity data 
-      ref_sum <- sum(ref_sim) # sum of reference energy consumption for all homes
-      intv_sum <- sum(intv_sim) # sum of intervention energy consumption for all homes
-      
-      # Store in respective matrices
-      ref_out[i, j] <- ref_sum
-      intv_out[i, j] <- intv_sum
-    }
-  }
-  
-  ref_out <- as.data.frame(ref_out)
-  colnames(ref_out) <- output_headers
-  ref_out <- ref_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(ref_name, ref_out, envir = .GlobalEnv)
-  
-  intv_out <- as.data.frame(intv_out)
-  colnames(intv_out) <- output_headers
-  intv_out <- intv_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(intv_name, intv_out, envir = .GlobalEnv)
-}
-
-### Calc intv data
-
-calc_intv <- function(intv_name, ref_data, intv_factor, units){
-  savings <- 1 - intv_factor[, -1]
-  intv_out <- ref_data[, -1] * savings
-  intv_out <- as.data.frame(intv_out)
-  colnames(intv_out) <- output_headers
-  intv_out <- intv_out %>%
     mutate(unit = units) %>%  
-    select(unit, everything())  
-  assign(intv_name, intv_out, envir = .GlobalEnv)
+    select(unit, everything())
+  assign(param_name, mcs_out, envir = .GlobalEnv)
 }
 
 ### Random assignment of intervention instances to project type
@@ -300,6 +245,92 @@ assign_projecttype <- function(intervention_sim){
     select(unit, everything())  # Move "unit" to the first position
   assign("hpwh_boundary_mgnl", hpwh_bound, envir = .GlobalEnv)
   
+}
+
+### Calc reference data 
+
+calc_ref <- function(ref_name, boundary_df, ref_pdf, ref_params, units){
+  
+  # Initiate empty dataframe 
+  sim_out <- matrix(0, nrow = run_count, ncol = scenario_years)
+  
+  # Simulate activity data
+  for (i in 1:run_count) {
+      ref_sim <- do.call(ref_pdf, c(list(1), ref_params))
+      param_sim <- rep(ref_sim, times = scenario_years)
+      sim_out[i,] <- param_sim
+    }
+  
+  # Calculate annual reference data 
+  ref_out <- sim_out * boundary_df[, -1]
+  
+  # Prep and create output
+  ref_out <- as.data.frame(ref_out)
+  colnames(ref_out) <- output_headers
+  ref_out <- ref_out %>%
+    mutate(unit = units) %>%  
+    select(unit, everything())
+  assign(ref_name, ref_out, envir = .GlobalEnv)
+}
+
+### Calc intv data
+
+calc_intv <- function(intv_name, ref_data, intv_factor, units){
+  savings <- 1 - intv_factor[, -1]
+  intv_out <- ref_data[, -1] * savings
+  intv_out <- as.data.frame(intv_out)
+  colnames(intv_out) <- output_headers
+  intv_out <- intv_out %>%
+    mutate(unit = units) %>%  
+    select(unit, everything())  
+  assign(intv_name, intv_out, envir = .GlobalEnv)
+}
+
+### Modify dataframes
+
+df_mod <- function(param_name, df1, df2, operation, units) {
+  if (!all(dim(df1) == dim(df2))) {
+    stop("Both data frames must have the same dimensions.")
+  }
+  
+  valid_operations <- c("+", "-", "*", "/")
+  if (!(operation %in% valid_operations)) {
+    stop("Invalid operation. Choose from '+', '-', '*', or '/'.")
+  }
+  # Preform operation
+  result <- as.data.frame(mapply(function(x, y) eval(parse(text = paste0("x", operation, "y"))), df1[,-1], df2[,-1]))
+  
+  # Prep and create output
+  colnames(result) <- output_headers
+  result <- result %>%
+    mutate(unit = units) %>%  
+    select(unit, everything())  
+  assign(param_name, result, envir = .GlobalEnv)
+}
+
+df_sum <- function(param_name, ...) {
+  dfs <- list(...)
+  
+  # Check that all data frames have the same dimensions
+  dims <- lapply(dfs, dim)
+  if (!all(sapply(dims, function(x) identical(x, dims[[1]])))) {
+    stop("All data frames must have the same dimensions.")
+  }
+  
+  # Extract the first column (assuming it's the units column)
+  units_col <- dfs[[1]][, 1, drop = FALSE]  # Keep it as a data frame
+  
+  # Extract the numeric columns
+  numeric_dfs <- lapply(dfs, function(df) df[, -1, drop = FALSE])
+  
+  # Sum element-wise across all numeric data frames
+  summed_numeric <- Reduce(`+`, numeric_dfs)
+  
+  # Combine the units column with the summed numeric columns
+  result <- cbind(units_col, summed_numeric)
+  
+  # Create output
+  assign(param_name, result, envir = .GlobalEnv)
 }
 
 ### Cumulative sum calculation 1 - Basic cumulative sum, preserving the units column
@@ -397,14 +428,14 @@ ghg_conversion2 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
 ### Spend-based GHG Conversion function with EF simulation from MCS (because costs are negative, this takes the inverse of the ad input)
 
 ghg_conversion3 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
-  ref_ghg <- ef_sim[, -1] * ref_ad * -1
+  ref_ghg <- ef_sim[, -1] * ref_ad[, -1] * -1
   colnames(ref_ghg) <- output_headers
   ref_ghg <- ref_ghg %>%
     mutate(unit = "kgco2e") %>% 
     select(unit, everything())  
   assign(ref_name, ref_ghg, envir = .GlobalEnv)
   
-  intv_ghg <- ef_sim[, -1] * intv_ad * -1
+  intv_ghg <- ef_sim[, -1] * intv_ad[, -1] * -1
   colnames(intv_ghg) <- output_headers
   intv_ghg <- intv_ghg %>%
     mutate(unit = "kgco2e") %>% 
@@ -424,11 +455,12 @@ mcs_stats_ann <- function(param_name, df, lower_bound_out = .05, lower_bound_in 
     ub1 = numeric(),
     stringsAsFactors = FALSE)
   
-  loop_count = ncol(df)
+  df1 <- df[, -1] # Remove leading unit column
+  loop_count = ncol(df1)
   
   for (i in 1:loop_count) {
     # Extract the values for each year
-    l_values <- df[,i]
+    l_values <- df1[,i]
     
     # Calculate statistics
     l_median <- median(l_values)        
@@ -441,7 +473,7 @@ mcs_stats_ann <- function(param_name, df, lower_bound_out = .05, lower_bound_in 
     stats_out <- rbind(
       stats_out,
       data.frame(
-        year = colnames(df)[i],
+        year = colnames(df1)[i],
         lb1 = l_lower_bound1,
         lb2 = l_lower_bound2,
         median = l_median,
@@ -466,7 +498,7 @@ mcs_stats_cumul <- function(param_name, df, lower_bound_out = .05, lower_bound_i
     ub1 = numeric(),
     stringsAsFactors = FALSE)
   
-  cumsum <- as.data.frame(t(apply(df, 1, cumsum)))
+  cumsum <- as.data.frame(t(apply(df[, -1], 1, cumsum)))
   loop_count = ncol(cumsum)
   
   for (i in 1:loop_count) {
@@ -498,7 +530,7 @@ mcs_stats_cumul <- function(param_name, df, lower_bound_out = .05, lower_bound_i
 
 ### Apply discount rate to MCS dataframe
 
-quick_discount <- function(param_name, df, dr, scenario_lifetime = scenario_years){
+quick_discount <- function(param_name, dr_name, df, dr, scenario_lifetime = scenario_years){
   drvalues <- numeric(scenario_years) # an empty vector 'drvalues' is created to house the loop outputs
   drvalues[1] <- 1          
   for (n in 2:scenario_years) {
@@ -506,10 +538,12 @@ quick_discount <- function(param_name, df, dr, scenario_lifetime = scenario_year
   }
   drvalues_df <- data.frame(t(drvalues)) # make a dataframe out of the discount rate loop output
   discount_df <- drvalues_df[rep(1, run_count),] # the discount rate vector is replicated into rows equal to the MCS run count
-  npv <- df/discount_df # the total annual cash flow is converted into NPV
+  npv <- df[, -1]/discount_df # the total annual cash flow is converted into NPV
   colnames(npv) <- output_headers # make the column headers years
-  assign(param_name, npv, envir = .GlobalEnv)
-  assign("dr_out", drvalues_df, envir = .GlobalEnv)
+  output <- cbind(df[,1], npv)
+  colnames(output)[1] <- "unit"
+  assign(param_name, output, envir = .GlobalEnv)
+  assign("scc_dr_out", discount_df, envir = .GlobalEnv)
 }
 
 
@@ -539,9 +573,9 @@ cba_discountrange <- function(dr_min, dr_max, annual_coben, scenario_lifetime = 
     colnames(drvalues_df) <- output_headers # make the column headers years
     discount_df <- drvalues_df[rep(1, run_count),] # the discount rate vector is replicated into rows equal to the MCS run count
     
-    annual_npv_private <- cashflow_private/discount_df # the total annual cash flow is converted into NPV
-    annual_npv_econ <- cashflow_econ/discount_df
-    annual_npv_social <- annual_npv_econ + annual_coben # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
+    annual_npv_private <- cashflow_private[, -1]/discount_df # the total annual cash flow is converted into NPV
+    annual_npv_econ <- cashflow_econ[, -1]/discount_df
+    annual_npv_social <- annual_npv_econ + annual_coben[, -1] # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
     
     npv_private_cumsum <- as.data.frame(t(apply(annual_npv_private, 1, cumsum))) # net present value is summed cumulatively for each year
     npv_econ_cumsum <- as.data.frame(t(apply(annual_npv_econ, 1, cumsum)))
@@ -579,13 +613,13 @@ cba_discountrange <- function(dr_min, dr_max, annual_coben, scenario_lifetime = 
     colnames(drvalues_df) <- output_headers # make the column headers years
     discount_df <- drvalues_df[rep(1, run_count),] # the discount rate vector is replicated into rows equal to the MCS run count
     
-    annual_beni_private <- cashflow_opex/discount_df # opex is treated as the flow of economic benefits in this case
-    annual_beni_econ <- cashflow_opex/discount_df
-    annual_beni_social <- annual_beni_econ + annual_coben # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
+    annual_beni_private <- cashflow_opex[, -1]/discount_df # opex is treated as the flow of economic benefits in this case
+    annual_beni_econ <- cashflow_opex[, -1]/discount_df
+    annual_beni_social <- annual_beni_econ + annual_coben[, -1] # cobenefit value is adjusted at different discount rate. Right now, dr = 0 is used
     
-    annual_capex_private <- (cashflow_investment*-1)/discount_df # capex is converted to a positive number and adjusted for the discount rate
-    annual_capex_econ <- (cashflow_investment*-1)/discount_df 
-    annual_capex_social <- (cashflow_investment*-1)/discount_df 
+    annual_capex_private <- (cashflow_investment[, -1]*-1)/discount_df # capex is converted to a positive number and adjusted for the discount rate
+    annual_capex_econ <- (cashflow_investment[, -1]*-1)/discount_df 
+    annual_capex_social <- (cashflow_investment[, -1]*-1)/discount_df 
     
     beni_private_cumsum <- as.data.frame(t(apply(annual_beni_private, 1, cumsum))) # annual benefits is summed cumulatively for each year
     beni_econ_cumsum <- as.data.frame(t(apply(annual_beni_econ, 1, cumsum)))
