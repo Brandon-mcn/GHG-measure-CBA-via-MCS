@@ -700,6 +700,53 @@ ggsave("figures/fig6.png", plot = p5, width = 6.5, height = 6.5, dpi = 300)
 
 ```
 
+Sensitivity analysis
+```{r}
+# GHG mitigation
+
+ashp_savings <- -1 * (rowSums(ashp_intv_ann_data1[,-1]) - rowSums(ashp_ref_ann_data1[,-1])) / rowSums(ashp_ref_ann_data1[,-1])
+weatherize_savings <- -1 * (rowSums(weatherize_intv_ann_data1[,-1]) - rowSums(weatherize_ref_ann_data1[,-1])) / rowSums(weatherize_ref_ann_data1[,-1])
+hpwh_savings <- -1 * (rowSums(hpwh_intv_ann_data1[,-1]) - rowSums(hpwh_ref_ann_data1[,-1])) / rowSums(hpwh_ref_ann_data1[,-1])
+
+sens_ghg <- data.frame(p_count =  rowSums(intv_boundary_mgnl[,-1]),
+                       ref_mwh = rowSums(ref_mwh),
+                       ref_mmbtu = rowSums(ref_mmbtu),
+                       ashp_savings = ashp_savings,
+                       weatherize_savings = weatherize_savings,
+                       hpwh_savings = hpwh_savings,
+                       ghg_mit = unname(ghg_mit))
+
+inputs <- sens_ghg[, 1:(ncol(sens_ghg) - 1)]  # Model parameters (adjust column range)
+output <- sens_ghg[, ncol(sens_ghg)]   # The final column is the emissions reduction result
+
+# Load necessary package for Standardized Regression Coefficients (SRC)
+library(boot)
+
+# Fit a linear regression model using inputs to predict the output
+lm_model <- lm(output ~ ., data = inputs)
+
+# Compute standardized regression coefficients (SRC)
+src_values <- coef(lm_model)[-1] * apply(inputs, 2, sd) / sd(output)
+
+# Rank variables by absolute SRC value
+ranked_src <- sort(abs(src_values), decreasing = TRUE)
+
+# Print ranked variables
+print(ranked_src)
+
+# Convert SRC results into a data frame
+src_df <- data.frame(Variable = names(ranked_src), SRC = ranked_src)
+
+ggplot(src_df, aes(x = reorder(Variable, SRC), y = SRC)) +
+  geom_segment(aes(xend = Variable, yend = 0), color = "gray") +  # Line from y = 0 to y = SRC
+  geom_point(size = 4, color = "blue") +  # Point at the end of the line
+  coord_flip() +  # Flip to horizontal layout
+  labs(title = "Variable Importance (SRC)", x = "Variable", y = "SRC Value") +
+  theme_minimal()
+
+
+```
+
 Results calcs
 ```{r}
 # MWh savings

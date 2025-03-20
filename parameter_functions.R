@@ -195,7 +195,7 @@ scenario_MCS <- function(param_name, sheet_name, units){
   assign(param_name, mcs_out, envir = .GlobalEnv)
 }
 
-### Activity data calculation 1 - Reference scenario is a baseline, intervention is a % reduction from the baseline
+### Activity data calculation 1 - Reference scenario is a baseline, intervention is a % reduction from the baseline. Each intervention instance is simulated
 
 calc_ad1 <- function(ref_name, intv_name, boundary_df, ref_pdf, ref_params, intv_pdf, intv_params, units){
   #initiate empty dataframe 
