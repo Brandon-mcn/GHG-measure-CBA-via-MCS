@@ -84,7 +84,7 @@ normal_PDF <- function(param_name, mean, sd, units) {
 
 ### continuous uniform parameter 1 - Select random value and assign it to all scenario years in one MCS trial
 
-continuous_uniform1 <- function(param_name, minvalue, maxvalue, units){
+cont_uniform1 <- function(param_name, minvalue, maxvalue, units){
   mcs_out <- data.frame(matrix(ncol = scenario_years, nrow = run_count)) # Initialize an empty dataframe
   for (i in 1:run_count) {
     random_value <- runif(1, min = minvalue, max = maxvalue)
@@ -237,6 +237,19 @@ calc_ad1 <- function(ref_name, intv_name, boundary_df, ref_pdf, ref_params, intv
   assign(intv_name, intv_out, envir = .GlobalEnv)
 }
 
+### Calc intv data
+
+calc_intv <- function(intv_name, ref_data, intv_factor, units){
+  savings <- 1 - intv_factor[, -1]
+  intv_out <- ref_data[, -1] * savings
+  intv_out <- as.data.frame(intv_out)
+  colnames(intv_out) <- output_headers
+  intv_out <- intv_out %>%
+    mutate(unit = units) %>%  
+    select(unit, everything())  
+  assign(intv_name, intv_out, envir = .GlobalEnv)
+}
+
 ### Random assignment of intervention instances to project type
 
 assign_projecttype <- function(intervention_sim){
@@ -320,84 +333,6 @@ cumul_sum2 <- function(param_name, df, intv_life = intv_lifetime){
   assign(param_name, df_result, envir = .GlobalEnv)
 }
 
-### Capex calculation
-
-calculate_capex <- function(ref_name, intv_name, ref_bound, intv_bound, capex_min, capex_max, units){
-  #initiate empty dataframe 
-  ref_out <- matrix(0, nrow = run_count, ncol = scenario_years)
-  intv_out <- matrix(0, nrow = run_count, ncol = scenario_years)
-  
-  for (i in 1:run_count) {
-    for (j in 1:scenario_years) {
-      nr <- ref_bound[i, (j+1)] # Because the boundary data has a leading unit column, j is shifted over by 1
-      ni <- intv_bound[i, (j+1)]
-      
-      # Calculate total capex costs for the reference and intervention scenarios
-      capex_refsim <- runif(nr, min = capex_min, max = capex_max) # Simulate capex for each home
-      capex_intvsim <- runif(ni, min = capex_min, max = capex_max) # Simulate capex for each home
-
-      # Sum total capex
-      ref_sum <- sum(capex_refsim) # sum of reference capex for all homes
-      intv_sum <- sum(capex_intvsim) # sum of intervention capex for all homes
-      
-      # Store in respective matrices
-      ref_out[i, j] <- ref_sum
-      intv_out[i, j] <- intv_sum
-    }
-  }
-  
-  ref_out <- as.data.frame(ref_out) * -1
-  colnames(ref_out) <- output_headers
-  ref_out <- ref_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(ref_name, ref_out, envir = .GlobalEnv)
-  
-  intv_out <- as.data.frame(intv_out) * -1
-  colnames(intv_out) <- output_headers
-  intv_out <- intv_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(intv_name, intv_out, envir = .GlobalEnv)
-}
-
-### Opex calculation
-
-calculate_opex <- function(ref_name, intv_name, ref_ad, intv_ad, opex, units){
-  #initiate empty dataframe 
-  ref_out <- matrix(0, nrow = run_count, ncol = scenario_years)
-  intv_out <- matrix(0, nrow = run_count, ncol = scenario_years)
-  
-  for (i in 1:run_count) {
-    for (j in 1:scenario_years) {
-      nr <- ref_ad[i, (j+1)] # Because the activity data has a leading unit column, j is shifted over by 1
-      ni <- intv_ad[i, (j+1)]
-      
-      # Calculate total opex
-      ref_sum <- nr * opex
-      intv_sum <- ni * opex
-      
-      # Store in respective matrices
-      ref_out[i, j] <- ref_sum
-      intv_out[i, j] <- intv_sum
-    }
-  }
-  
-  ref_out <- as.data.frame(ref_out) * -1
-  colnames(ref_out) <- output_headers
-  ref_out <- ref_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(ref_name, ref_out, envir = .GlobalEnv)
-  
-  intv_out <- as.data.frame(intv_out) * -1
-  colnames(intv_out) <- output_headers
-  intv_out <- intv_out %>%
-    mutate(unit = units) %>%  # Add "unit" column with user 'units' input as value
-    select(unit, everything())  # Move "unit" to the first position
-  assign(intv_name, intv_out, envir = .GlobalEnv)
-}
-
 ### GHG Conversion function using a static emission factor
 
 ghg_conversion1 <- function(ref_name,
@@ -462,14 +397,14 @@ ghg_conversion2 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
 ### Spend-based GHG Conversion function with EF simulation from MCS (because costs are negative, this takes the inverse of the ad input)
 
 ghg_conversion3 <- function(ref_name, intv_name, ef_sim, ref_ad, intv_ad){
-  ref_ghg <- ef_sim[, -1] * ref_ad[, -1] * -1
+  ref_ghg <- ef_sim[, -1] * ref_ad * -1
   colnames(ref_ghg) <- output_headers
   ref_ghg <- ref_ghg %>%
     mutate(unit = "kgco2e") %>% 
     select(unit, everything())  
   assign(ref_name, ref_ghg, envir = .GlobalEnv)
   
-  intv_ghg <- ef_sim[, -1] * intv_ad[, -1] * -1
+  intv_ghg <- ef_sim[, -1] * intv_ad * -1
   colnames(intv_ghg) <- output_headers
   intv_ghg <- intv_ghg %>%
     mutate(unit = "kgco2e") %>% 

@@ -30,7 +30,7 @@ library(tidyr)
 Set up global variables
 ```{r}
 # Define the following global variables to be called by parameter functions
-run_count <- 10000
+run_count <- 1000
 scenario_start <- 2025
 intv_years <- 10 # The number of years the intervention will be implemented
 intv_lifetime <- 15 # The number of years the intervention generates benefits, generally the expected lifetime of equipment
@@ -73,52 +73,54 @@ discrete_uniform3("intv_boundary_mgnl", minvalue = 120, maxvalue = 160, nyears =
 # Project types are randomly assigned for the intervention boundary, with three new dataframes for each project type.
 assign_projecttype(intv_boundary_mgnl)
 
+# Energy Prices 
+static_value("kwh_price", value = 0.1542, units = "USD")
+static_value("therm_price", value = 0.3434, units = "therms")
+
 ```
 
 Air source heat pumps (ASHP): Activity data, cost, and ghg simulations
 ```{r}
-# Simulate annual electricity consumption for space heating and cooling. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
-calc_ad1("ashp_ref_ann_data1",
-         "ashp_intv_ann_data1",
-         ashp_boundary_mgnl, 
-         ref_pdf = rnorm,
-         ref_params = list(mean = 4161, sd = 233), # Reference electricity consumption is modeled with a normal distribution
-         intv_pdf = runif, 
-         intv_params = list(min = 0.31, max = 0.47), # Intervention factor, % savings, is modeled with a uniform distribution  
-         units = "kWh")
+# Simulate reference scenario electricity consumption for space heating and cooling.
+normal_PDF("ashp_ref_ann_data1", mean = 4161, sd = 233, "kWh")
 
-# Calculate cumulative activity data
+# Simulate reference scenario natural gas consumption for space heating and cooling.
+normal_PDF("ashp_ref_ann_data2", mean = 603, sd = 11.3, "therms")
+
+# Simulate intervention energy savings from ASHP upgrade
+cont_uniform1("ashp_intv_factor", minvalue = 0.31, maxvalue = 0.47, "% savings")
+
+# Calculate intervention scenario energy consumption based on modeled savings
+calc_intv("ashp_intv_ann_data1", ashp_ref_ann_data1, ashp_intv_factor, "kwh")
+calc_intv("ashp_intv_ann_data2", ashp_ref_ann_data2, ashp_intv_factor, "therms")
+
+# Calculate cumulative activity data based on scenario lifetime
 cumul_sum2("ashp_ref_data1", ashp_ref_ann_data1)
-cumul_sum2("ashp_intv_data1", ashp_intv_ann_data1)
-
-# Simulate annual natural gas consumption for space heating. Each home in the boundary is simulated individually. The intervention factor is the % energy savings, also simulated for each home in the boundary. 
-calc_ad1("ashp_ref_ann_data2",
-         "ashp_intv_ann_data2",
-         ashp_boundary_mgnl, 
-         ref_pdf = rnorm,
-         ref_params = list(mean = 603, sd = 11.3), # Reference natural gas consumption is modeled with a normal distribution
-         intv_pdf = runif, 
-         intv_params = list(min = 0.31, max = 0.47), # Intervention factor, % savings,is modeled with a uniform distribution  
-         units = "therms")
-
-# Calculate cumulative activity data
 cumul_sum2("ashp_ref_data2", ashp_ref_ann_data2)
+
+cumul_sum2("ashp_intv_data1", ashp_intv_ann_data1)
 cumul_sum2("ashp_intv_data2", ashp_intv_ann_data2)
 
 # ASHP Capex is calculated by simulating the installation costs for each home
-calculate_capex("ashp_ref_capex1", "ashp_intv_capex1", ref_boundary_mgnl, ashp_boundary_mgnl, capex_min = 2100, capex_max = 6000, units = "USD")
+discrete_uniform1("ashp_capex_factor1", minvalue = 2100, maxvalue = 6000, units = "USD")
+ashp_intv_capex1 <- ashp_boundary_mgnl[, -1] * ashp_capex_factor1[, -1]
+ashp_ref_capex1 <- ref_boundary_mgnl[, -1] * ashp_capex_factor1[, -1]
 
 # Sum total Capex
-ashp_ref_sumcapex <- ashp_ref_capex1[,-1]
-ashp_intv_sumcapex <- ashp_intv_capex1[,-1]
+ashp_intv_sumcapex <- ashp_intv_capex1
+ashp_ref_sumcapex <- ashp_ref_capex1
 
-# ASHP Opex is calculated for electricity and natural gas separately, based on current energy prices
-calculate_opex("ashp_ref_opex1", "ashp_intv_opex1", ashp_ref_data1, ashp_intv_data1, opex = 0.1542, units = "USD")
-calculate_opex("ashp_ref_opex2", "ashp_intv_opex2", ashp_ref_data2, ashp_intv_data2, opex = 0.3434, units = "therms")
+# ASHP electricity opex
+ashp_ref_opex1 <- ashp_ref_data1[, -1] * kwh_price[, -1]
+ashp_intv_opex1 <- ashp_intv_data1[, -1] * kwh_price[, -1]
+
+# ASHP therms opex
+ashp_ref_opex2 <- ashp_ref_data2[, -1] * therm_price[, -1]
+ashp_intv_opex2 <- ashp_intv_data2[, -1] * therm_price[, -1]
 
 # Sum total opex
-ashp_ref_sumopex <- ashp_ref_opex1[,-1] + ashp_ref_opex2[,-1]
-ashp_intv_sumopex <- ashp_intv_opex1[,-1] + ashp_intv_opex2[,-1]
+ashp_ref_sumopex <- ashp_ref_opex1 + ashp_ref_opex2
+ashp_intv_sumopex <- ashp_intv_opex1 + ashp_intv_opex2
 
 # Calculate scope 1 natural gas emissions 
 ghg_conversion1("ashp_ref_ghg_natgas",
@@ -804,6 +806,7 @@ ashp_outputlist <- (list("ashp_boundary_mgnl" = ashp_boundary_mgnl,
                          "ashp_ref_sumopex" = ashp_ref_sumopex,
                          "ashp_intv_ann_data1" = ashp_intv_ann_data1,
                          "ashp_intv_ann_data2" = ashp_intv_ann_data2,
+                         "ashp_intv_factor" = ashp_intv_factor, #new
                          "ashp_intv_data1" = ashp_intv_data1,
                          "ashp_intv_data2" = ashp_intv_data2,
                          "ashp_intv_ghg_elec" = ashp_intv_ghg_elec,
